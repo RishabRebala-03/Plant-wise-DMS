@@ -4,6 +4,7 @@ import {
   Eye, Download, Trash2, X,
 } from "lucide-react";
 import { LIVE_SYNC_INTERVAL_MS, categoryOptions, documentsApi, plantsApi } from "../lib/api";
+import { getDocumentTimestamp } from "../lib/datetime";
 import { exportRowsToCsv, exportRowsToExcel } from "../lib/export";
 import type { Comment, DocumentRecord, Plant } from "../lib/types";
 import { DocumentDrawer } from "./document-drawer";
@@ -151,7 +152,7 @@ export function ManagerDocuments({ mine = true }: ManagerDocumentsProps) {
       plant: document.plant,
       category: document.category,
       uploadedBy: document.uploadedBy,
-      uploadedAt: document.date,
+      uploadedAt: getDocumentTimestamp(document),
       status: document.status,
     })),
     [documents],
@@ -250,7 +251,7 @@ export function ManagerDocuments({ mine = true }: ManagerDocumentsProps) {
             </colgroup>
             <thead>
               <tr className="bg-[#fafafa] border-b border-[#f0f0f0] text-left">
-                {["Document Name", "Plant", "Category", "Date", "Actions"].map((heading) => (
+                {["Document Name", "Plant", "Category", "Uploaded", "Actions"].map((heading) => (
                   <th key={heading} className="px-5 py-3 text-[#6a6d70]" style={{ fontSize: 12, fontWeight: 500 }}>{heading}</th>
                 ))}
               </tr>
@@ -266,7 +267,7 @@ export function ManagerDocuments({ mine = true }: ManagerDocumentsProps) {
                   </td>
                   <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.plant}</td>
                   <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.category}</td>
-                  <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.date || "-"}</td>
+                  <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{getDocumentTimestamp(document)}</td>
                   <td className="px-5 py-4">
                     <div className="flex flex-wrap items-center gap-2 min-w-[280px]">
                       <button onClick={() => void openDocumentDetails(document)} className="h-8 min-w-[120px] px-3 border border-[#d9d9d9] text-[#333] hover:bg-[#f5f5f5] inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer" style={{ fontSize: 12 }}>

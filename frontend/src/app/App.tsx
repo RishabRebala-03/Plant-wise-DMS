@@ -104,7 +104,7 @@ import {
   type ProjectRecord,
   type SessionPolicy,
 } from "./lib/portal";
-import type { Activity, Comment, DocumentConversationMessage, DocumentRecord, GovernancePolicy, NotificationItem, OutsideHoursAttempt, Plant, SessionRecord, User, UserRole } from "./lib/types";
+import type { Activity, Comment, DocumentConversationMessage, DocumentRecord, GovernancePolicy, LoginTrackingEvent, NotificationItem, OutsideHoursAttempt, Plant, PlantLoginSummary, SessionRecord, User, UserRole } from "./lib/types";
 
 type PortalContextValue = {
   user: User;
@@ -515,8 +515,14 @@ function PortalProvider({ user, children }: { user: User; children: ReactNode })
     [plants, visiblePlantIds],
   );
   const scopedProjects = useMemo(
-    () => portalState.projects.filter((project) => visiblePlantIds.has(project.plantId)),
-    [portalState.projects, visiblePlantIds],
+    () => portalState.projects.filter((project) => (
+      visiblePlantIds.has(project.plantId)
+      && (
+        user.role !== "Mining Manager"
+        || (project.owner === user.name && project.source !== "derived")
+      )
+    )),
+    [portalState.projects, user.name, user.role, visiblePlantIds],
   );
   const scopedRawDocuments = useMemo(
     () => rawDocuments.filter((document) => visiblePlantIds.has(document.plantId)),
@@ -667,7 +673,7 @@ function RoleGate({ allowed, capability, children }: { allowed?: UserRole[]; cap
   if (allowed && !roleAllows(user.role, allowed)) {
     return <Navigate to={defaultHome(user.role)} replace />;
   }
-  if (capability && !hasAccessCapability(accessRule, capability)) {
+  if (capability && user.role !== "Admin" && !hasAccessCapability(accessRule, capability)) {
     return <Navigate to={defaultHome(user.role)} replace />;
   }
   return <>{children}</>;
@@ -835,23 +841,25 @@ function Shell({ onLogout, session }: { onLogout: () => void; session: SessionUi
     const common: NavItem[] = [{ label: "Settings", path: user.role === "Admin" ? "/admin/settings" : "/settings", icon: Settings }];
     if (user.role === "CEO") {
       const governance: NavItem[] = [];
-      if (can("canManageUsers")) {
-        governance.push({ label: "Manager Access", path: "/oversight", icon: UserCog, capability: "canManageUsers" });
-        governance.push({ label: "Master Data", path: "/admin/master-data", icon: Database, capability: "canManageUsers" });
+      if (can("canAccessUsers")) {
+        governance.push({ label: "Users", path: "/oversight", icon: UserCog, capability: "canAccessUsers" });
       }
-      if (can("canConfigureIp")) {
-        governance.push({ label: "IP Configuration", path: "/admin/network", icon: Network, capability: "canConfigureIp" });
+      if (can("canAccessMasterData")) {
+        governance.push({ label: "Master Data", path: "/admin/master-data", icon: Database, capability: "canAccessMasterData" });
+      }
+      if (can("canAccessIpConfiguration")) {
+        governance.push({ label: "IP Configuration", path: "/admin/network", icon: Network, capability: "canAccessIpConfiguration" });
       }
         return [
         [
-          { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-          { label: "Plants", path: "/plants", icon: Building2 },
-          { label: "Projects", path: "/projects", icon: FolderKanban },
-          { label: "Documents", path: "/documents", icon: FileText },
-          { label: "Analytics", path: "/analytics", icon: LineChartIcon },
+          { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, capability: "canAccessDashboard" },
+          { label: "Plants", path: "/plants", icon: Building2, capability: "canAccessPlants" },
+          { label: "Projects", path: "/projects", icon: FolderKanban, capability: "canAccessProjects" },
+          { label: "Documents", path: "/documents", icon: FileText, capability: "canAccessDocuments" },
+          { label: "Analytics", path: "/analytics", icon: LineChartIcon, capability: "canAccessAnalytics" },
           { label: "Upload", path: "/upload", icon: Upload, capability: "canUploadDocuments" },
-          { label: "Audit Logs", path: "/activity-logs", icon: Clock3 },
-          { label: "Sessions", path: "/admin/sessions", icon: Clock3 },
+          { label: "Audit Logs", path: "/activity-logs", icon: Clock3, capability: "canAccessAuditLogs" },
+          { label: "Sessions", path: "/admin/sessions", icon: Clock3, capability: "canAccessSessions" },
           ...governance,
         ],
         common,
@@ -860,10 +868,10 @@ function Shell({ onLogout, session }: { onLogout: () => void; session: SessionUi
     if (user.role === "Mining Manager") {
       return [
         [
-          { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-          { label: "Plants", path: "/plants", icon: Building2 },
-          { label: "Projects", path: "/projects", icon: FolderKanban },
-          { label: "Documents", path: "/documents", icon: FileText },
+          { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, capability: "canAccessDashboard" },
+          { label: "Plants", path: "/plants", icon: Building2, capability: "canAccessPlants" },
+          { label: "Projects", path: "/projects", icon: FolderKanban, capability: "canAccessProjects" },
+          { label: "Documents", path: "/documents", icon: FileText, capability: "canAccessDocuments" },
           { label: "Project Creation", path: `/plants/${primaryPlantId(user)}/projects/new`, icon: Plus, capability: "canCreateProjects" },
           { label: "Upload", path: "/upload", icon: Upload, capability: "canUploadDocuments" },
         ],
@@ -872,19 +880,18 @@ function Shell({ onLogout, session }: { onLogout: () => void; session: SessionUi
     }
     return [
       [
-        { label: "Admin Dashboard", path: "/admin", icon: LayoutDashboard },
-        { label: "Plants", path: "/plants", icon: Building2 },
-        { label: "Projects", path: "/projects", icon: FolderKanban },
-        { label: "Documents", path: "/documents", icon: FileText },
-        { label: "Analytics", path: "/analytics", icon: LineChartIcon },
+        { label: "Admin Dashboard", path: "/admin", icon: LayoutDashboard, capability: "canAccessDashboard" },
+        { label: "Plants", path: "/plants", icon: Building2, capability: "canAccessPlants" },
+        { label: "Projects", path: "/projects", icon: FolderKanban, capability: "canAccessProjects" },
+        { label: "Documents", path: "/documents", icon: FileText, capability: "canAccessDocuments" },
+        { label: "Analytics", path: "/analytics", icon: LineChartIcon, capability: "canAccessAnalytics" },
         { label: "Upload", path: "/upload", icon: Upload, capability: "canUploadDocuments" },
-        { label: "Users", path: "/admin/users", icon: Users, capability: "canManageUsers" },
-        { label: "Manager Access", path: "/oversight", icon: UserCog, capability: "canManageUsers" },
-        { label: "Master Data", path: "/admin/master-data", icon: Database, capability: "canManageUsers" },
-        { label: "Access Control", path: "/admin/access", icon: ShieldCheck },
-        { label: "IP Configuration", path: "/admin/network", icon: Network, capability: "canConfigureIp" },
-        { label: "Sessions", path: "/admin/sessions", icon: Clock3 },
-        { label: "Audit Logs", path: "/admin/activity-logs", icon: LineChartIcon },
+        { label: "Users", path: "/admin/users", icon: Users, capability: "canAccessUsers" },
+        { label: "Master Data", path: "/admin/master-data", icon: Database, capability: "canAccessMasterData" },
+        { label: "Access Control", path: "/admin/access", icon: ShieldCheck, capability: "canAccessAccessControl" },
+        { label: "IP Configuration", path: "/admin/network", icon: Network, capability: "canAccessIpConfiguration" },
+        { label: "Sessions", path: "/admin/sessions", icon: Clock3, capability: "canAccessSessions" },
+        { label: "Audit Logs", path: "/admin/activity-logs", icon: LineChartIcon, capability: "canAccessAuditLogs" },
       ],
       common,
     ];
@@ -1083,9 +1090,40 @@ function DashboardPage() {
   return <ManagerDashboardPage />;
 }
 
+function HeroInsightDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)] sm:max-w-[720px]">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-xl font-semibold text-slate-900">{title}</DialogTitle>
+            <DialogDescription className="mt-2 text-sm leading-6 text-slate-500">{description}</DialogDescription>
+          </DialogHeader>
+        </div>
+        <div className="max-h-[70vh] overflow-auto px-6 py-5">
+          {children}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CeoDashboardPage() {
   const { documents, plants, projects, users, user } = usePortal();
   const navigate = useNavigate();
+  const [heroDialog, setHeroDialog] = useState<null | "latest-upload" | "stalled-plants">(null);
   const plantSummary = useMemo(() => summarizeByPlant(documents), [documents]);
   const topPlants = [...plantSummary].sort((a, b) => b.documents - a.documents).slice(0, 5);
   const lineSeries = topPlants.map((item, index) => ({
@@ -1112,14 +1150,23 @@ function CeoDashboardPage() {
             <div className="text-xs uppercase tracking-[0.26em] text-white/55">Executive dashboard</div>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight">Welcome back, {greetingName}</h1>
             <div className="mt-4 grid gap-3 text-sm text-white/78 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => latestDocument && setHeroDialog("latest-upload")}
+                disabled={!latestDocument}
+                className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12 disabled:cursor-default disabled:hover:bg-white/8"
+              >
                 <div className="text-white/55">Latest upload</div>
                 <div className="mt-1 font-semibold text-white">{latestDocument ? `${latestDocument.name} · ${formatDate(latestDocument.date)}` : "No uploads recorded"}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => setHeroDialog("stalled-plants")}
+                className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12"
+              >
                 <div className="text-white/55">Plants needing attention</div>
                 <div className="mt-1 font-semibold text-white">{stalledPlants.length} plant{stalledPlants.length === 1 ? "" : "s"}</div>
-              </div>
+              </button>
             </div>
           </div>
           <div className="grid min-w-[260px] gap-3 rounded-[28px] border border-white/10 bg-white/6 p-4">
@@ -1279,6 +1326,77 @@ function CeoDashboardPage() {
           </div>
         </div>
       </div>
+
+      <HeroInsightDialog
+        open={heroDialog === "latest-upload"}
+        onOpenChange={(open) => setHeroDialog(open ? "latest-upload" : null)}
+        title="Latest upload"
+        description="This is the most recent document uploaded into the executive workspace."
+      >
+        {latestDocument ? (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="font-semibold text-slate-900">{latestDocument.name}</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  {latestDocument.plant} • {latestDocument.category}
+                </div>
+                <div className="mt-3 text-sm text-slate-700">
+                  Uploaded by {latestDocument.uploadedBy} on {formatDate(latestDocument.date)}.
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  Project: {latestDocument.projectName || "No project assigned"}.
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  Status: {latestDocument.status}.
+                </div>
+              </div>
+              <button type="button" onClick={() => navigate(`/documents/${latestDocument.id}`)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                Open document
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            No uploads recorded yet.
+          </div>
+        )}
+      </HeroInsightDialog>
+
+      <HeroInsightDialog
+        open={heroDialog === "stalled-plants"}
+        onOpenChange={(open) => setHeroDialog(open ? "stalled-plants" : null)}
+        title="Plants needing attention"
+        description="Plants are flagged when they have no upload history or their latest upload is older than 14 days."
+      >
+        {stalledPlants.length ? (
+          <div className="space-y-3">
+            {stalledPlants.map((plant) => {
+              const reason = plant.lastUpload
+                ? `Last upload was ${formatDate(plant.lastUpload)}, which is older than 14 days.`
+                : "No uploads have been recorded for this plant yet.";
+              return (
+                <div key={plant.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-semibold text-slate-900">{plant.name}</div>
+                      <div className="mt-1 text-sm text-slate-500">Last upload: {formatDate(plant.lastUpload)}</div>
+                      <div className="mt-3 text-sm text-slate-700">{reason}</div>
+                    </div>
+                    <button type="button" onClick={() => navigate(`/plants/${plant.id}`)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                      Open plant
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            No plants are currently overdue for uploads.
+          </div>
+        )}
+      </HeroInsightDialog>
     </div>
   );
 }
@@ -1287,10 +1405,13 @@ function ManagerDashboardPage() {
   const { user, documents, projects } = usePortal();
   const { can } = useRoleAccess();
   const navigate = useNavigate();
+  const [heroDialog, setHeroDialog] = useState<null | "projects" | "documents" | "locked">(null);
+  const [selectedHeroDocument, setSelectedHeroDocument] = useState<DocumentRecord | null>(null);
   const allowedPlantIds = assignedPlantIds(user);
   const myProjects = projects.filter((project) => allowedPlantIds.includes(project.plantId));
   const myDocuments = documents.filter((document) => allowedPlantIds.includes(document.plantId));
   const lockedDocuments = myDocuments.filter((document) => document.accessLocked);
+  const managerGreetingName = user.firstName || user.name.split(" ")[0] || "there";
 
   return (
     <div className="space-y-6">
@@ -1298,20 +1419,20 @@ function ManagerDashboardPage() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
             <div className="text-xs uppercase tracking-[0.26em] text-white/55">Manager dashboard</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">{user.assignedPlants?.join(", ") || user.plant || "Assigned plants"} project control</h1>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Welcome back, {managerGreetingName}</h1>
             <div className="mt-4 grid gap-3 text-sm text-white/78 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <button type="button" onClick={() => setHeroDialog("projects")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">Projects</div>
                 <div className="mt-1 font-semibold text-white">{myProjects.length}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              </button>
+              <button type="button" onClick={() => setHeroDialog("documents")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">Documents</div>
                 <div className="mt-1 font-semibold text-white">{myDocuments.length}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              </button>
+              <button type="button" onClick={() => setHeroDialog("locked")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">Locked</div>
                 <div className="mt-1 font-semibold text-white">{lockedDocuments.length}</div>
-              </div>
+              </button>
             </div>
           </div>
           <div className="grid min-w-[260px] gap-3 rounded-[28px] border border-white/10 bg-white/6 p-4">
@@ -1393,6 +1514,88 @@ function ManagerDashboardPage() {
           </div>
         </div>
       </div>
+
+      <HeroInsightDialog
+        open={heroDialog === "projects"}
+        onOpenChange={(open) => setHeroDialog(open ? "projects" : null)}
+        title="Projects in your plant scope"
+        description="These are the project workspaces currently assigned to your allowed plants."
+      >
+        {myProjects.length ? (
+          <div className="space-y-3">
+            {myProjects.map((project) => (
+              <div key={project.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-semibold text-slate-900">{project.name}</div>
+                    <div className="mt-1 text-sm text-slate-500">{project.code} • {project.plantName}</div>
+                    <div className="mt-3 text-sm text-slate-700">{project.documentIds.length} document{project.documentIds.length === 1 ? "" : "s"} in this workspace. Owner: {project.owner}.</div>
+                  </div>
+                  <button type="button" onClick={() => navigate(`/plants/${project.plantId}/projects/${project.id}/documents`)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                    Open project
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No projects are currently assigned to your plant scope.</div>
+        )}
+      </HeroInsightDialog>
+
+      <HeroInsightDialog
+        open={heroDialog === "documents"}
+        onOpenChange={(open) => setHeroDialog(open ? "documents" : null)}
+        title="Documents in your plant scope"
+        description="Open any document from this quick list to inspect its details without leaving the dashboard."
+      >
+        {myDocuments.length ? (
+          <div className="space-y-3">
+            {[...myDocuments].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 8).map((document) => (
+              <button key={document.id} type="button" onClick={() => setSelectedHeroDocument(document)} className="w-full rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-semibold text-slate-900">{document.name}</div>
+                    <div className="mt-1 text-sm text-slate-500">{document.category} • {document.projectName || "No project"}</div>
+                    <div className="mt-3 text-sm text-slate-700">Uploaded by {document.uploadedBy} on {formatDate(document.date)}.</div>
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{document.status}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No documents are currently visible in your plant scope.</div>
+        )}
+      </HeroInsightDialog>
+
+      <HeroInsightDialog
+        open={heroDialog === "locked"}
+        onOpenChange={(open) => setHeroDialog(open ? "locked" : null)}
+        title="Locked documents"
+        description="These records have already been opened in a manager context and are now in controlled read-only mode."
+      >
+        {lockedDocuments.length ? (
+          <div className="space-y-3">
+            {lockedDocuments.map((document) => (
+              <button key={document.id} type="button" onClick={() => setSelectedHeroDocument(document)} className="w-full rounded-3xl border border-rose-200 bg-rose-50 p-4 text-left transition hover:border-rose-300 hover:bg-rose-100">
+                <div className="font-semibold text-slate-900">{document.name}</div>
+                <div className="mt-1 text-sm text-slate-500">{document.plant} • {document.category}</div>
+                <div className="mt-3 text-sm text-slate-700">Locked after access. Uploaded by {document.uploadedBy} on {formatDate(document.date)}.</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">No documents have been locked in this manager session.</div>
+        )}
+      </HeroInsightDialog>
+
+      {selectedHeroDocument ? (
+        <DocumentDrawer
+          doc={selectedHeroDocument}
+          onClose={() => setSelectedHeroDocument(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2600,7 +2803,8 @@ function DocumentDetailPage() {
 
   if (!document) return <NotFoundCard title="Document not found" body="This document is no longer available in the current filtered workspace." />;
 
-  const canDownloadOriginal = user.role === "CEO" || (user.role === "Mining Manager" && document.uploadedById === user.id);
+  const canDownloadOriginal = Boolean(user.capabilities?.canDownloadDocuments)
+    && (user.role === "CEO" || user.role === "Admin" || (user.role === "Mining Manager" && document.uploadedById === user.id));
   const canViewOriginal = canDownloadOriginal;
   const previewSupported = canPreviewInBrowser(document.file?.name, document.file?.contentType);
 
@@ -2690,7 +2894,7 @@ function DocumentDetailPage() {
           </div>
           {document.file?.storageId && !canDownloadOriginal ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Downloads are restricted. CEOs have full access, and managers can only download documents they uploaded themselves.
+              Downloads are restricted. Managers can only download their own documents when CEO/Admin grant download access.
             </div>
           ) : null}
           {previewLoading ? (
@@ -3567,8 +3771,11 @@ function AnalyticsPage() {
 
 function AdminDashboardPage() {
   const { users, documents, plants, portalState } = usePortal();
+  const { user } = usePortal();
   const { can } = useRoleAccess();
   const navigate = useNavigate();
+  const [heroDialog, setHeroDialog] = useState<null | "users" | "rules" | "session">(null);
+  const adminGreetingName = user.firstName || user.name.split(" ")[0] || "there";
   const disabledUsers = users.filter((candidate) => candidate.status !== "Active").length;
   const managerUsers = users.filter((candidate) => candidate.role === "Mining Manager");
   const multiPlantManagers = managerUsers.filter((candidate) => (candidate.assignedPlantIds?.length || 0) > 1).length;
@@ -3626,20 +3833,20 @@ function AdminDashboardPage() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-3xl">
             <div className="text-xs uppercase tracking-[0.26em] text-white/55">Admin command center</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Governance analytics for identity, network policy, and platform controls</h1>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Welcome back, {adminGreetingName}</h1>
             <div className="mt-4 grid gap-3 text-sm text-white/78 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <button type="button" onClick={() => setHeroDialog("users")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">Users</div>
                 <div className="mt-1 font-semibold text-white">{users.length}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              </button>
+              <button type="button" onClick={() => setHeroDialog("rules")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">IP Rules</div>
                 <div className="mt-1 font-semibold text-white">{portalState.ipRules.length}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              </button>
+              <button type="button" onClick={() => setHeroDialog("session")} className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-left transition hover:bg-white/12">
                 <div className="text-white/55">Session Mode</div>
                 <div className="mt-1 font-semibold text-white">{portalState.sessionPolicy.conflictMode}</div>
-              </div>
+              </button>
             </div>
           </div>
           <div className="grid min-w-[280px] gap-3 rounded-[28px] border border-white/10 bg-black/10 p-4 backdrop-blur">
@@ -3794,6 +4001,109 @@ function AdminDashboardPage() {
         {can("canConfigureIp") ? <AdminTile title="IP configuration" body="Maintain allowed, blocked, and review network addresses." to="/admin/network" icon={Globe} /> : null}
         <AdminTile title="Session policies" body="Configure auto logout and concurrent session handling." to="/admin/sessions" icon={Clock3} />
       </div>
+
+      <HeroInsightDialog
+        open={heroDialog === "users"}
+        onOpenChange={(open) => setHeroDialog(open ? "users" : null)}
+        title="User summary"
+        description="A quick operational snapshot of registered accounts, their role mix, and any users who may need admin attention."
+      >
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Total users</div>
+            <div className="mt-2 text-3xl font-semibold text-slate-900">{users.length}</div>
+          </div>
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-amber-700">Managers</div>
+            <div className="mt-2 text-3xl font-semibold text-slate-900">{managerUsers.length}</div>
+          </div>
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-rose-700">Need attention</div>
+            <div className="mt-2 text-3xl font-semibold text-slate-900">{disabledUsers}</div>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {users.slice(0, 8).map((candidate) => (
+            <div key={candidate.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="font-semibold text-slate-900">{candidate.name}</div>
+                  <div className="mt-1 text-sm text-slate-500">{formatRole(candidate.role)} • {candidate.email}</div>
+                  <div className="mt-3 text-sm text-slate-700">
+                    {candidate.status === "Active"
+                      ? `Active account${candidate.assignedPlants?.length ? ` covering ${candidate.assignedPlants.join(", ")}.` : "."}`
+                      : `Status is ${candidate.status}, so this account may need review or reactivation.`}
+                  </div>
+                </div>
+                {can("canManageUsers") ? (
+                  <button type="button" onClick={() => navigate(`/admin/users/${candidate.id}`)} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                    Open user
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </HeroInsightDialog>
+
+      <HeroInsightDialog
+        open={heroDialog === "rules"}
+        onOpenChange={(open) => setHeroDialog(open ? "rules" : null)}
+        title="IP rules summary"
+        description="Each rule shows its current decision state so admins can quickly spot entries that still need action."
+      >
+        {portalState.ipRules.length ? (
+          <div className="space-y-3">
+            {portalState.ipRules.map((rule) => (
+              <div key={rule.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-semibold text-slate-900">{rule.label}</div>
+                    <div className="mt-1 text-sm text-slate-500">{rule.address}</div>
+                    <div className="mt-3 text-sm text-slate-700">
+                      {rule.status === "Review"
+                        ? "This entry still needs an allow or block decision."
+                        : rule.status === "Blocked"
+                          ? "This source is currently blocked from access."
+                          : "This source is currently allowed by the network policy."}
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                    {rule.status}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">No IP rules have been configured yet.</div>
+        )}
+      </HeroInsightDialog>
+
+      <HeroInsightDialog
+        open={heroDialog === "session"}
+        onOpenChange={(open) => setHeroDialog(open ? "session" : null)}
+        title="Session enforcement"
+        description="This shows the active conflict handling and timeout configuration that shapes current session behavior."
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Conflict mode</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">{portalState.sessionPolicy.conflictMode}</div>
+            <div className="mt-3 text-sm text-slate-700">Determines whether competing sessions are blocked or handled more softly.</div>
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Timeout</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">{portalState.sessionPolicy.autoLogoutMinutes} min</div>
+            <div className="mt-3 text-sm text-slate-700">Inactive sessions are logged out automatically after this period.</div>
+          </div>
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Single session</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">{portalState.sessionPolicy.enforceSingleSession ? "Enforced" : "Advisory"}</div>
+            <div className="mt-3 text-sm text-slate-700">Shows whether one active session per user is strictly enforced.</div>
+          </div>
+        </div>
+      </HeroInsightDialog>
     </div>
   );
 }
@@ -5067,6 +5377,14 @@ function ManagerOversightPage() {
     () => users.filter((candidate) => candidate.role === "Mining Manager"),
     [users],
   );
+  const managersWithPlants = useMemo(
+    () => managers.filter((candidate) => (candidate.assignedPlantIds?.length || 0) > 0 || Boolean(candidate.plantId)).length,
+    [managers],
+  );
+  const managersWithoutPlants = useMemo(
+    () => managers.filter((candidate) => !((candidate.assignedPlantIds?.length || 0) > 0 || Boolean(candidate.plantId))).length,
+    [managers],
+  );
 
   const managerOptions = useMemo(
     () => managers.map((candidate) => candidate.name).sort((a, b) => a.localeCompare(b)).map((candidate) => ({ value: candidate, label: candidate, meta: "Manager" })),
@@ -5239,15 +5557,15 @@ function ManagerOversightPage() {
 
   return (
     <div className="space-y-6">
-      <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users" }] : [{ label: "Manager Access" }]} />
+      <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users" }] : [{ label: "Users" }]} />
       <SectionCard
         title="Manager oversight"
         subtitle={user.role === "Admin" ? "Admin can update, remove, and inactivate manager accounts." : "CEO can review, edit, remove, and revoke access for mining managers."}
       >
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard label="Managers" value={managers.length} hint="Mining manager accounts in the system." icon={Users} tone="blue" />
-          <MetricCard label="Assigned plants" value={managers.reduce((total, candidate) => total + (candidate.assignedPlantIds?.length || 0), 0)} hint="Plant scopes currently distributed across manager accounts." icon={Building2} />
-          <MetricCard label="Portal accounts" value={managers.length} hint="Manager records available for document coordination." icon={ShieldCheck} />
+          <MetricCard label="Managers with plants" value={managersWithPlants} hint={`${managersWithoutPlants} manager${managersWithoutPlants === 1 ? "" : "s"} still need a plant assignment.`} icon={Building2} />
+          <MetricCard label="All user accounts" value={users.length} hint="Includes Admin, CEO, and Mining Manager accounts." icon={ShieldCheck} />
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -5609,7 +5927,7 @@ function ManagerDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users", to: "/admin/users" }, { label: target.name }] : [{ label: "Manager Access", to: "/oversight" }, { label: target.name }]} />
+      <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users", to: "/admin/users" }, { label: target.name }] : [{ label: "Users", to: "/oversight" }, { label: target.name }]} />
       <SectionCard title={target.name} subtitle="Manager profile, assigned plants, and scoped activity">
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard label="Assigned Plants" value={assignedPlantsList.length} hint="Plants this manager can access." icon={Building2} tone="blue" />
@@ -5840,6 +6158,249 @@ function AdminAccessPage() {
   const [savingManagerId, setSavingManagerId] = useState<string | null>(null);
   const [savingRules, setSavingRules] = useState(false);
   const [rulesMessage, setRulesMessage] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [roleCapabilityFilter, setRoleCapabilityFilter] = useState("");
+  const [roleUploadFilter, setRoleUploadFilter] = useState("");
+  const [roleUserManagementFilter, setRoleUserManagementFilter] = useState("");
+  const [roleSort, setRoleSort] = useState("role-asc");
+  const [managerNameFilter, setManagerNameFilter] = useState("");
+  const [managerEmailFilter, setManagerEmailFilter] = useState("");
+  const [managerStatusFilter, setManagerStatusFilter] = useState("");
+  const [managerAssignedPlantFilter, setManagerAssignedPlantFilter] = useState("");
+  const [managerAssignmentHealthFilter, setManagerAssignmentHealthFilter] = useState("");
+  const [managerScopeCountFilter, setManagerScopeCountFilter] = useState("");
+  const [managerSort, setManagerSort] = useState("name-asc");
+  const managerUsers = users.filter((candidate) => candidate.role === "Mining Manager");
+  const managersNeedingScope = managerUsers.filter((manager) => !(manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : [])).length);
+  const capabilityLabelMap: Record<AccessCapability, string> = {
+    canCreateProjects: "Create projects",
+    canUploadDocuments: "Upload documents",
+    canDownloadDocuments: "Download documents",
+    canAccessDashboard: "Dashboard tab",
+    canAccessPlants: "Plants tab",
+    canAccessProjects: "Projects tab",
+    canAccessDocuments: "Documents tab",
+    canAccessAnalytics: "Analytics tab",
+    canAccessAuditLogs: "Audit logs tab",
+    canAccessSessions: "Sessions tab",
+    canAccessSettings: "Settings tab",
+    canAccessUsers: "Users tab",
+    canAccessMasterData: "Master data tab",
+    canAccessAccessControl: "Access control tab",
+    canAccessIpConfiguration: "IP configuration tab",
+    canEditDocuments: "Edit documents",
+    canDeleteDocuments: "Delete documents",
+    canManageUsers: "Manage users",
+    canConfigureIp: "Configure IP",
+  };
+  const roleOptions = useMemo(() => buildValueHelpOptions(portalState.accessRules.map((rule) => formatRole(rule.role)), "Role"), [portalState.accessRules]);
+  const capabilityOptions = useMemo<ValueHelpOption[]>(
+    () => Object.entries(capabilityLabelMap).map(([value, label]) => ({ value, label, meta: "Capability" })),
+    [],
+  );
+  const enabledDisabledOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "Enabled", label: "Enabled", meta: "State" },
+      { value: "Disabled", label: "Disabled", meta: "State" },
+    ],
+    [],
+  );
+  const roleSortOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "role-asc", label: "Role A-Z", meta: "Sort" },
+      { value: "capabilities-desc", label: "Most permissions enabled", meta: "Sort" },
+      { value: "capabilities-asc", label: "Fewest permissions enabled", meta: "Sort" },
+    ],
+    [],
+  );
+  const managerNameOptions = useMemo(() => buildValueHelpOptions(managerUsers.map((manager) => manager.name), "Manager"), [managerUsers]);
+  const managerEmailOptions = useMemo(() => buildValueHelpOptions(managerUsers.map((manager) => manager.email), "Email"), [managerUsers]);
+  const managerStatusOptions = useMemo(() => buildValueHelpOptions(managerUsers.map((manager) => manager.status), "Status"), [managerUsers]);
+  const managerAssignedPlantOptions = useMemo(
+    () => buildValueHelpOptions(
+      managerUsers.flatMap((manager) => {
+        const selected = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
+        return selected.map((plantId) => plants.find((plant) => plant.id === plantId)?.name || plantId);
+      }),
+      "Assigned plant",
+    ),
+    [managerUsers, plants],
+  );
+  const managerAssignmentHealthOptions = useMemo(
+    () => [
+      { value: "Needs assignment", label: "Needs assignment", meta: "Assignment" },
+      { value: "Assigned", label: "Assigned", meta: "Assignment" },
+    ],
+    [],
+  );
+  const managerScopeCountOptions = useMemo(
+    () => [
+      { value: "0", label: "0 plants", meta: "Scope count" },
+      { value: "1", label: "1 plant", meta: "Scope count" },
+      { value: "2+", label: "2+ plants", meta: "Scope count" },
+    ],
+    [],
+  );
+  const managerSortOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "name-asc", label: "Manager A-Z", meta: "Sort" },
+      { value: "name-desc", label: "Manager Z-A", meta: "Sort" },
+      { value: "scope-desc", label: "Most plants assigned", meta: "Sort" },
+      { value: "scope-asc", label: "Fewest plants assigned", meta: "Sort" },
+      { value: "status-asc", label: "Status A-Z", meta: "Sort" },
+    ],
+    [],
+  );
+  const filteredRoleRules = useMemo(() => portalState.accessRules.filter((rule) => {
+    const enabledCapabilities = (Object.keys(capabilityLabelMap) as AccessCapability[]).filter((capability) => rule[capability]);
+    const uploadState = rule.canUploadDocuments ? "Enabled" : "Disabled";
+    const userManagementState = rule.canManageUsers ? "Enabled" : "Disabled";
+
+    return matchesValueHelpFilter(roleFilter, formatRole(rule.role))
+      && matchesValueHelpFilter(roleCapabilityFilter, ...enabledCapabilities.map((capability) => capabilityLabelMap[capability]))
+      && matchesValueHelpFilter(roleUploadFilter, uploadState)
+      && matchesValueHelpFilter(roleUserManagementFilter, userManagementState);
+  }), [portalState.accessRules, roleFilter, roleCapabilityFilter, roleUploadFilter, roleUserManagementFilter]);
+  const sortedRoleRules = useMemo(() => {
+    const next = [...filteredRoleRules];
+    next.sort((left, right) => {
+      const leftEnabled = (Object.keys(capabilityLabelMap) as AccessCapability[]).filter((capability) => left[capability]).length;
+      const rightEnabled = (Object.keys(capabilityLabelMap) as AccessCapability[]).filter((capability) => right[capability]).length;
+      switch (roleSort) {
+        case "capabilities-desc":
+          return compareNumber(rightEnabled, leftEnabled) || compareText(formatRole(left.role), formatRole(right.role));
+        case "capabilities-asc":
+          return compareNumber(leftEnabled, rightEnabled) || compareText(formatRole(left.role), formatRole(right.role));
+        case "role-asc":
+        default:
+          return compareText(formatRole(left.role), formatRole(right.role));
+      }
+    });
+    return next;
+  }, [filteredRoleRules, roleSort]);
+  const filteredManagers = useMemo(() => managerUsers.filter((manager) => {
+    const selectedPlantIds = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
+    const selectedPlantNames = selectedPlantIds.map((plantId) => plants.find((plant) => plant.id === plantId)?.name || plantId);
+    const assignmentHealth = selectedPlantIds.length ? "Assigned" : "Needs assignment";
+    const scopeCountBucket = selectedPlantIds.length === 0 ? "0" : selectedPlantIds.length === 1 ? "1" : "2+";
+
+    return matchesValueHelpFilter(managerNameFilter, manager.name)
+      && matchesValueHelpFilter(managerEmailFilter, manager.email)
+      && matchesValueHelpFilter(managerStatusFilter, manager.status)
+      && matchesValueHelpFilter(managerAssignedPlantFilter, ...selectedPlantNames)
+      && matchesValueHelpFilter(managerAssignmentHealthFilter, assignmentHealth)
+      && matchesValueHelpFilter(managerScopeCountFilter, scopeCountBucket);
+  }), [
+    managerUsers,
+    managerNameFilter,
+    managerEmailFilter,
+    managerStatusFilter,
+    managerAssignedPlantFilter,
+    managerAssignmentHealthFilter,
+    managerScopeCountFilter,
+    plants,
+  ]);
+  const sortedManagers = useMemo(() => {
+    const next = [...filteredManagers];
+    next.sort((left, right) => {
+      const leftAssigned = left.assignedPlantIds || (left.plantId ? [left.plantId] : []);
+      const rightAssigned = right.assignedPlantIds || (right.plantId ? [right.plantId] : []);
+      switch (managerSort) {
+        case "name-desc":
+          return compareText(right.name, left.name);
+        case "scope-desc":
+          return compareNumber(rightAssigned.length, leftAssigned.length) || compareText(left.name, right.name);
+        case "scope-asc":
+          return compareNumber(leftAssigned.length, rightAssigned.length) || compareText(left.name, right.name);
+        case "status-asc":
+          return compareText(left.status, right.status) || compareText(left.name, right.name);
+        case "name-asc":
+        default:
+          return compareText(left.name, right.name);
+      }
+    });
+    return next;
+  }, [filteredManagers, managerSort]);
+  const allRoleExportRows = useMemo<ExportRow[]>(
+    () => portalState.accessRules.map((rule) => ({
+      role: formatRole(rule.role),
+      createProjects: rule.canCreateProjects ? "Yes" : "No",
+      uploadDocuments: rule.canUploadDocuments ? "Yes" : "No",
+      downloadDocuments: rule.canDownloadDocuments ? "Yes" : "No",
+      dashboardTab: rule.canAccessDashboard ? "Yes" : "No",
+      plantsTab: rule.canAccessPlants ? "Yes" : "No",
+      projectsTab: rule.canAccessProjects ? "Yes" : "No",
+      documentsTab: rule.canAccessDocuments ? "Yes" : "No",
+      analyticsTab: rule.canAccessAnalytics ? "Yes" : "No",
+      auditLogsTab: rule.canAccessAuditLogs ? "Yes" : "No",
+      sessionsTab: rule.canAccessSessions ? "Yes" : "No",
+      settingsTab: rule.canAccessSettings ? "Yes" : "No",
+      usersTab: rule.canAccessUsers ? "Yes" : "No",
+      masterDataTab: rule.canAccessMasterData ? "Yes" : "No",
+      accessControlTab: rule.canAccessAccessControl ? "Yes" : "No",
+      ipConfigurationTab: rule.canAccessIpConfiguration ? "Yes" : "No",
+      editDocuments: rule.canEditDocuments ? "Yes" : "No",
+      deleteDocuments: rule.canDeleteDocuments ? "Yes" : "No",
+      manageUsers: rule.canManageUsers ? "Yes" : "No",
+      configureIp: rule.canConfigureIp ? "Yes" : "No",
+    })),
+    [portalState.accessRules],
+  );
+  const filteredRoleExportRows = useMemo<ExportRow[]>(
+    () => sortedRoleRules.map((rule) => ({
+      role: formatRole(rule.role),
+      createProjects: rule.canCreateProjects ? "Yes" : "No",
+      uploadDocuments: rule.canUploadDocuments ? "Yes" : "No",
+      downloadDocuments: rule.canDownloadDocuments ? "Yes" : "No",
+      dashboardTab: rule.canAccessDashboard ? "Yes" : "No",
+      plantsTab: rule.canAccessPlants ? "Yes" : "No",
+      projectsTab: rule.canAccessProjects ? "Yes" : "No",
+      documentsTab: rule.canAccessDocuments ? "Yes" : "No",
+      analyticsTab: rule.canAccessAnalytics ? "Yes" : "No",
+      auditLogsTab: rule.canAccessAuditLogs ? "Yes" : "No",
+      sessionsTab: rule.canAccessSessions ? "Yes" : "No",
+      settingsTab: rule.canAccessSettings ? "Yes" : "No",
+      usersTab: rule.canAccessUsers ? "Yes" : "No",
+      masterDataTab: rule.canAccessMasterData ? "Yes" : "No",
+      accessControlTab: rule.canAccessAccessControl ? "Yes" : "No",
+      ipConfigurationTab: rule.canAccessIpConfiguration ? "Yes" : "No",
+      editDocuments: rule.canEditDocuments ? "Yes" : "No",
+      deleteDocuments: rule.canDeleteDocuments ? "Yes" : "No",
+      manageUsers: rule.canManageUsers ? "Yes" : "No",
+      configureIp: rule.canConfigureIp ? "Yes" : "No",
+    })),
+    [sortedRoleRules],
+  );
+  const allManagerAssignmentExportRows = useMemo<ExportRow[]>(
+    () => managerUsers.map((manager) => {
+      const selectedPlantIds = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
+      const selectedPlantNames = selectedPlantIds.map((plantId) => plants.find((plant) => plant.id === plantId)?.name || plantId);
+      return {
+        manager: manager.name,
+        email: manager.email,
+        status: manager.status,
+        assignedPlants: selectedPlantNames.join(", ") || "None",
+        scopeCount: selectedPlantIds.length,
+        assignment: selectedPlantIds.length ? "Assigned" : "Needs assignment",
+      };
+    }),
+    [managerUsers, plants],
+  );
+  const filteredManagerAssignmentExportRows = useMemo<ExportRow[]>(
+    () => sortedManagers.map((manager) => {
+      const selectedPlantIds = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
+      const selectedPlantNames = selectedPlantIds.map((plantId) => plants.find((plant) => plant.id === plantId)?.name || plantId);
+      return {
+        manager: manager.name,
+        email: manager.email,
+        status: manager.status,
+        assignedPlants: selectedPlantNames.join(", ") || "None",
+        scopeCount: selectedPlantIds.length,
+        assignment: selectedPlantIds.length ? "Assigned" : "Needs assignment",
+      };
+    }),
+    [sortedManagers, plants],
+  );
 
   async function updateRule(index: number, field: keyof AccessRule, value: string | boolean) {
     const next = portalState.accessRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule);
@@ -5870,37 +6431,135 @@ function AdminAccessPage() {
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: "Admin", to: "/admin" }, { label: "Access Control" }]} />
-      <SectionCard title="Role-based access control" subtitle="Frontend restrictions by role">
-        {rulesMessage ? <div className={`mb-4 text-sm ${rulesMessage === "Access rules updated." ? "text-emerald-700" : "text-[#BB0000]"}`}>{rulesMessage}</div> : null}
+      <section className="rounded-[32px] bg-[linear-gradient(135deg,_#0f172a,_#334155)] px-6 py-8 text-white shadow-[0_28px_70px_rgba(15,23,42,0.22)]">
+        <div className="max-w-4xl">
+          <div className="text-xs uppercase tracking-[0.26em] text-white/55">Access control</div>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight">Manage roles and plant assignment</h1>
+          <div className="mt-4 grid gap-3 text-sm text-white/78 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <div className="text-white/55">Managers</div>
+              <div className="mt-1 font-semibold text-white">{managerUsers.length}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <div className="text-white/55">Need assignment</div>
+              <div className="mt-1 font-semibold text-white">{managersNeedingScope.length}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <div className="text-white/55">Plants</div>
+              <div className="mt-1 font-semibold text-white">{plants.length}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {rulesMessage ? (
+        <div className={`rounded-2xl border px-4 py-3 text-sm ${
+          rulesMessage === "Access rules updated."
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : "border-rose-200 bg-rose-50 text-rose-700"
+        }`}>
+          {rulesMessage}
+        </div>
+      ) : null}
+
+      {managersNeedingScope.length ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {managersNeedingScope.length} manager{managersNeedingScope.length === 1 ? "" : "s"} need a plant assignment.
+        </div>
+      ) : null}
+
+      <SectionCard title="Role permissions" action={<ExportActions fileBaseName="access-role-permissions" filteredRows={filteredRoleExportRows} allRows={allRoleExportRows} />}>
+        <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={roleOptions} value={roleFilter} onChange={setRoleFilter} containerClassName="w-full" />
+          <ValueHelp label="Capability" placeholder="All capabilities" emptyLabel="No matching capabilities." options={capabilityOptions} value={roleCapabilityFilter} onChange={setRoleCapabilityFilter} containerClassName="w-full" />
+          <ValueHelp label="Upload" placeholder="Any upload state" emptyLabel="No matching upload states." options={enabledDisabledOptions} value={roleUploadFilter} onChange={setRoleUploadFilter} containerClassName="w-full" />
+          <ValueHelp label="Manage Users" placeholder="Any user-management state" emptyLabel="No matching states." options={enabledDisabledOptions} value={roleUserManagementFilter} onChange={setRoleUserManagementFilter} containerClassName="w-full" />
+          <div className="flex items-end gap-3 md:col-span-2 xl:col-span-1">
+            <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={roleSortOptions} value={roleSort} onChange={setRoleSort} containerClassName="w-full" clearLabel="Role A-Z" clearDescription="Reset to the default sort order" />
+            <button
+              type="button"
+              onClick={() => {
+                setRoleFilter("");
+                setRoleCapabilityFilter("");
+                setRoleUploadFilter("");
+                setRoleUserManagementFilter("");
+                setRoleSort("role-asc");
+              }}
+              className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
         <div className="grid gap-4">
-          {portalState.accessRules.map((rule, index) => (
+          {sortedRoleRules.map((rule) => {
+            const index = portalState.accessRules.findIndex((candidate) => candidate.role === rule.role);
+            return (
             <div key={rule.role} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-              <div className="mb-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-lg font-semibold text-slate-900">{formatRole(rule.role)}</div>
-                  <div className="mt-1 text-sm text-slate-500">{rule.plantsScope}</div>
-                </div>
-                <select value={rule.plantsScope} disabled={savingRules} onChange={(event) => void updateRule(index, "plantsScope", event.target.value)} className="h-11 w-full max-w-sm rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500 disabled:bg-slate-100">
-                  <option value="All plants">All plants</option>
-                  {plants.map((plant) => <option key={`${rule.role}-${plant.id}`} value={plant.name}>{plant.name}</option>)}
-                </select>
+              <div className="mb-4">
+                <div className="text-lg font-semibold text-slate-900">{formatRole(rule.role)}</div>
               </div>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <AccessToggle label="Create projects" checked={rule.canCreateProjects} disabled={savingRules} onChange={(checked) => void updateRule(index, "canCreateProjects", checked)} />
                 <AccessToggle label="Upload documents" checked={rule.canUploadDocuments} disabled={savingRules} onChange={(checked) => void updateRule(index, "canUploadDocuments", checked)} />
+                <AccessToggle label="Download documents" checked={rule.canDownloadDocuments} disabled={savingRules} onChange={(checked) => void updateRule(index, "canDownloadDocuments", checked)} />
+                <AccessToggle label="Dashboard tab" checked={rule.canAccessDashboard} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessDashboard", checked)} />
+                <AccessToggle label="Plants tab" checked={rule.canAccessPlants} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessPlants", checked)} />
+                <AccessToggle label="Projects tab" checked={rule.canAccessProjects} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessProjects", checked)} />
+                <AccessToggle label="Documents tab" checked={rule.canAccessDocuments} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessDocuments", checked)} />
+                <AccessToggle label="Analytics tab" checked={rule.canAccessAnalytics} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessAnalytics", checked)} />
+                <AccessToggle label="Audit logs tab" checked={rule.canAccessAuditLogs} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessAuditLogs", checked)} />
+                <AccessToggle label="Sessions tab" checked={rule.canAccessSessions} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessSessions", checked)} />
+                <AccessToggle label="Settings tab" checked={rule.canAccessSettings} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessSettings", checked)} />
+                <AccessToggle label="Users tab" checked={rule.canAccessUsers} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessUsers", checked)} />
+                <AccessToggle label="Master data tab" checked={rule.canAccessMasterData} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessMasterData", checked)} />
+                <AccessToggle label="Access control tab" checked={rule.canAccessAccessControl} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessAccessControl", checked)} />
+                <AccessToggle label="IP configuration tab" checked={rule.canAccessIpConfiguration} disabled={savingRules} onChange={(checked) => void updateRule(index, "canAccessIpConfiguration", checked)} />
                 <AccessToggle label="Edit documents" checked={rule.canEditDocuments} disabled={savingRules} onChange={(checked) => void updateRule(index, "canEditDocuments", checked)} />
                 <AccessToggle label="Delete documents" checked={rule.canDeleteDocuments} disabled={savingRules} onChange={(checked) => void updateRule(index, "canDeleteDocuments", checked)} />
                 <AccessToggle label="Manage users" checked={rule.canManageUsers} disabled={savingRules} onChange={(checked) => void updateRule(index, "canManageUsers", checked)} />
                 <AccessToggle label="Configure IP" checked={rule.canConfigureIp} disabled={savingRules} onChange={(checked) => void updateRule(index, "canConfigureIp", checked)} />
               </div>
             </div>
-          ))}
+          );
+          })}
+          {!sortedRoleRules.length ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              No roles matched the current filters.
+            </div>
+          ) : null}
         </div>
       </SectionCard>
 
-      <SectionCard title="Assign plants to managers" subtitle="Managers can only see documents and plants within their assigned scope">
-        <div className="grid gap-4">
-          {users.filter((candidate) => candidate.role === "Mining Manager").map((manager) => {
+      <SectionCard title="Manager plant assignment" action={<ExportActions fileBaseName="access-manager-plant-assignment" filteredRows={filteredManagerAssignmentExportRows} allRows={allManagerAssignmentExportRows} />}>
+        <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <ValueHelp label="Manager" placeholder="All managers" emptyLabel="No matching managers." options={managerNameOptions} value={managerNameFilter} onChange={setManagerNameFilter} containerClassName="w-full" />
+          <ValueHelp label="Email" placeholder="All emails" emptyLabel="No matching emails." options={managerEmailOptions} value={managerEmailFilter} onChange={setManagerEmailFilter} containerClassName="w-full" />
+          <ValueHelp label="Status" placeholder="All statuses" emptyLabel="No matching statuses." options={managerStatusOptions} value={managerStatusFilter} onChange={setManagerStatusFilter} containerClassName="w-full" />
+          <ValueHelp label="Assigned Plant" placeholder="All plants" emptyLabel="No matching plants." options={managerAssignedPlantOptions} value={managerAssignedPlantFilter} onChange={setManagerAssignedPlantFilter} containerClassName="w-full" />
+          <ValueHelp label="Assignment" placeholder="All assignment states" emptyLabel="No matching assignment states." options={managerAssignmentHealthOptions} value={managerAssignmentHealthFilter} onChange={setManagerAssignmentHealthFilter} containerClassName="w-full" />
+          <ValueHelp label="Scope Count" placeholder="Any scope count" emptyLabel="No matching scope counts." options={managerScopeCountOptions} value={managerScopeCountFilter} onChange={setManagerScopeCountFilter} containerClassName="w-full" />
+          <div className="flex items-end gap-3 md:col-span-2 xl:col-span-2">
+            <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={managerSortOptions} value={managerSort} onChange={setManagerSort} containerClassName="w-full" clearLabel="Manager A-Z" clearDescription="Reset to the default sort order" />
+            <button
+              type="button"
+              onClick={() => {
+                setManagerNameFilter("");
+                setManagerEmailFilter("");
+                setManagerStatusFilter("");
+                setManagerAssignedPlantFilter("");
+                setManagerAssignmentHealthFilter("");
+                setManagerScopeCountFilter("");
+                setManagerSort("name-asc");
+              }}
+              className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {sortedManagers.map((manager) => {
             const selected = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
             return (
               <div key={manager.id} className="rounded-[28px] border border-slate-200 bg-white p-5">
@@ -5920,6 +6579,7 @@ function AdminAccessPage() {
                         checked={selected.includes(plant.id)}
                         disabled={savingManagerId === manager.id}
                         onChange={(event) => void togglePlantAssignment(manager, plant.id, event.target.checked)}
+                        className="h-4 w-4 accent-teal-600"
                       />
                     </label>
                   ))}
@@ -5927,6 +6587,11 @@ function AdminAccessPage() {
               </div>
             );
           })}
+          {!sortedManagers.length ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              No managers matched the current filters.
+            </div>
+          ) : null}
         </div>
       </SectionCard>
     </div>
@@ -6002,15 +6667,19 @@ function formatDuration(seconds?: number) {
   return `${remainingSeconds}s`;
 }
 
-function loginIp(activity: Activity) {
-  const raw = activity.metadata?.clientIp;
+function loginIp(activity: Activity | LoginTrackingEvent) {
+  if ("clientIp" in activity && typeof activity.clientIp === "string" && activity.clientIp.trim()) {
+    return activity.clientIp;
+  }
+  const raw = "metadata" in activity ? activity.metadata?.clientIp : undefined;
   return typeof raw === "string" && raw.trim() ? raw : "Unknown IP";
 }
 
 function AdminNetworkPage() {
   const [activeNetworkTab, setActiveNetworkTab] = useState("rules");
   const [rules, setRules] = useState<IpRule[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loginEvents, setLoginEvents] = useState<LoginTrackingEvent[]>([]);
+  const [plantLoginSummaries, setPlantLoginSummaries] = useState<PlantLoginSummary[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [draft, setDraft] = useState({ label: "", address: "", status: "Allowed" as IpRule["status"] });
   const [ruleSearch, setRuleSearch] = useState("");
@@ -6028,9 +6697,15 @@ function AdminNetworkPage() {
   const [watchDatePreset, setWatchDatePreset] = useState("");
   const [watchDateFrom, setWatchDateFrom] = useState("");
   const [watchDateTo, setWatchDateTo] = useState("");
+  const [plantFilter, setPlantFilter] = useState("");
+  const [plantRoleFilter, setPlantRoleFilter] = useState("");
+  const [plantDatePreset, setPlantDatePreset] = useState("");
+  const [plantDateFrom, setPlantDateFrom] = useState("");
+  const [plantDateTo, setPlantDateTo] = useState("");
   const [ruleSort, setRuleSort] = useState("updated-desc");
   const [personaSort, setPersonaSort] = useState("last-seen-desc");
   const [watchSort, setWatchSort] = useState("logins-desc");
+  const [plantSort, setPlantSort] = useState("logins-desc");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [activityError, setActivityError] = useState("");
@@ -6039,11 +6714,12 @@ function AdminNetworkPage() {
     setLoading(true);
     Promise.all([
       settingsApi.listIpRules(),
-      activitiesApi.list({ action: "Login" }),
+      settingsApi.listSessions(),
     ])
-      .then(([ruleResult, activityResult]) => {
+      .then(([ruleResult, sessionResult]) => {
         setRules(ruleResult.items);
-        setActivities(activityResult.items);
+        setLoginEvents(sessionResult.loginTracking.items);
+        setPlantLoginSummaries(sessionResult.loginTracking.plantSummaries);
         setActivityError("");
       })
       .catch((err) => {
@@ -6067,10 +6743,7 @@ function AdminNetworkPage() {
     setMessage("IP rule created successfully.");
   }
 
-  const loginActivities = useMemo(
-    () => activities.filter((activity) => activity.action === "Login"),
-    [activities],
-  );
+  const loginActivities = loginEvents;
 
   const personaSummaries = useMemo(() => {
     const grouped = new Map<string, {
@@ -6081,25 +6754,25 @@ function AdminNetworkPage() {
       total: number;
       lastSeen: string | null;
       ips: Set<string>;
-      events: Activity[];
+      events: LoginTrackingEvent[];
     }>();
 
     loginActivities.forEach((activity) => {
-      const email = typeof activity.metadata?.email === "string" ? activity.metadata.email : "";
+      const email = activity.userEmail || "";
       const key = activity.userId || email || activity.userName || activity.id;
       const existing = grouped.get(key) || {
         id: key,
         name: activity.userName || "Unknown user",
-        role: typeof activity.metadata?.role === "string" ? activity.metadata.role : "Unknown role",
+        role: activity.userRole || "Unknown role",
         email,
         total: 0,
-        lastSeen: activity.createdAt,
+        lastSeen: activity.occurredAt,
         ips: new Set<string>(),
         events: [],
       };
 
       existing.total += 1;
-      existing.lastSeen = !existing.lastSeen || (activity.createdAt && activity.createdAt > existing.lastSeen) ? activity.createdAt : existing.lastSeen;
+      existing.lastSeen = !existing.lastSeen || (activity.occurredAt && activity.occurredAt > existing.lastSeen) ? activity.occurredAt : existing.lastSeen;
       existing.ips.add(loginIp(activity));
       existing.events.push(activity);
       grouped.set(key, existing);
@@ -6122,15 +6795,15 @@ function AdminNetworkPage() {
       const existing = grouped.get(ip) || {
         ip,
         total: 0,
-        lastSeen: activity.createdAt,
+        lastSeen: activity.occurredAt,
         personas: new Set<string>(),
         roles: new Set<string>(),
       };
 
       existing.total += 1;
-      existing.lastSeen = !existing.lastSeen || (activity.createdAt && activity.createdAt > existing.lastSeen) ? activity.createdAt : existing.lastSeen;
+      existing.lastSeen = !existing.lastSeen || (activity.occurredAt && activity.occurredAt > existing.lastSeen) ? activity.occurredAt : existing.lastSeen;
       existing.personas.add(activity.userName || "Unknown user");
-      existing.roles.add(typeof activity.metadata?.role === "string" ? activity.metadata.role : "Unknown role");
+      existing.roles.add(activity.userRole || "Unknown role");
       grouped.set(ip, existing);
     });
 
@@ -6303,16 +6976,60 @@ function AdminNetworkPage() {
     () => sortedIpSummaries.map((entry) => ({ ip: entry.ip, logins: entry.total, personas: Array.from(entry.personas).join(", "), roles: Array.from(entry.roles).join(", "), lastSeen: entry.lastSeen })),
     [sortedIpSummaries],
   );
+  const plantOptions = useMemo(() => buildValueHelpOptions(plantLoginSummaries.map((entry) => entry.plantName), "Plant"), [plantLoginSummaries]);
+  const plantRoleOptions = useMemo(() => buildValueHelpOptions(plantLoginSummaries.flatMap((entry) => entry.roles), "Role"), [plantLoginSummaries]);
+  const plantSortOptions = useMemo(
+    () => [
+      { value: "logins-desc", label: "Most logins first", meta: "Sort" },
+      { value: "plant-asc", label: "Plant A-Z", meta: "Sort" },
+      { value: "users-desc", label: "Most users first", meta: "Sort" },
+      { value: "latest-desc", label: "Latest login first", meta: "Sort" },
+    ],
+    [],
+  );
+  const filteredPlantSummaries = useMemo(
+    () =>
+      plantLoginSummaries.filter((entry) => (
+        matchesValueHelpFilter(plantFilter, entry.plantName) &&
+        (!plantRoleFilter || entry.roles.includes(plantRoleFilter)) &&
+        matchesRelativeDatePreset(entry.latestLoginAt, plantDatePreset) &&
+        (!plantDateFrom || Boolean(entry.latestLoginAt && entry.latestLoginAt.slice(0, 10) >= plantDateFrom)) &&
+        (!plantDateTo || Boolean(entry.latestLoginAt && entry.latestLoginAt.slice(0, 10) <= plantDateTo))
+      )),
+    [plantDateFrom, plantDatePreset, plantDateTo, plantFilter, plantLoginSummaries, plantRoleFilter],
+  );
+  const sortedPlantSummaries = useMemo(() => {
+    const next = [...filteredPlantSummaries];
+    next.sort((left, right) => {
+      switch (plantSort) {
+        case "plant-asc":
+          return compareText(left.plantName, right.plantName);
+        case "users-desc":
+          return compareNumber(right.uniqueUsers, left.uniqueUsers) || compareText(left.plantName, right.plantName);
+        case "latest-desc":
+          return compareDateValue(right.latestLoginAt, left.latestLoginAt) || compareText(left.plantName, right.plantName);
+        case "logins-desc":
+        default:
+          return compareNumber(right.logins, left.logins) || compareText(left.plantName, right.plantName);
+      }
+    });
+    return next;
+  }, [filteredPlantSummaries, plantSort]);
+  const allPlantExportRows = useMemo(
+    () => plantLoginSummaries.map((entry) => ({ plant: entry.plantName, logins: entry.logins, uniqueUsers: entry.uniqueUsers, uniqueIps: entry.uniqueIps, latestLoginAt: entry.latestLoginAt, roles: entry.roles.join(", "), browsers: entry.browsers.join(", "), users: entry.users.join(", ") })),
+    [plantLoginSummaries],
+  );
+  const filteredPlantExportRows = useMemo(
+    () => sortedPlantSummaries.map((entry) => ({ plant: entry.plantName, logins: entry.logins, uniqueUsers: entry.uniqueUsers, uniqueIps: entry.uniqueIps, latestLoginAt: entry.latestLoginAt, roles: entry.roles.join(", "), browsers: entry.browsers.join(", "), users: entry.users.join(", ") })),
+    [sortedPlantSummaries],
+  );
 
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: "Admin", to: "/admin" }, { label: "IP Configuration" }]} />
       <section className="overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_top_left,_rgba(125,211,252,0.22),_transparent_28%),linear-gradient(135deg,_#0b132b_0%,_#12355b_50%,_#0f766e_100%)] px-6 py-8 text-white shadow-[0_28px_70px_rgba(2,6,23,0.28)]">
-        <div className="text-xs uppercase tracking-[0.26em] text-cyan-100/85">Network security command center</div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight">Identity, ingress, and IP posture in one admin view</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-100/90">
-          Monitor which personas are signing in, where they are signing in from, and how those login patterns align with the IP controls configured for the portal.
-        </p>
+        <div className="text-xs uppercase tracking-[0.26em] text-cyan-100/85">IP configuration</div>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight">Manage IP rules and login activity</h1>
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-[28px] border border-emerald-200/40 bg-[linear-gradient(180deg,_rgba(16,185,129,0.22),_rgba(6,78,59,0.3))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-sm">
             <div className="mb-5 flex items-center justify-between">
@@ -6322,7 +7039,7 @@ function AdminNetworkPage() {
               </div>
             </div>
             <div className="text-4xl font-semibold tracking-tight text-white">{loginActivities.length}</div>
-            <div className="mt-3 text-sm leading-6 text-emerald-50/85">Recent authenticated sign-ins captured in activity telemetry.</div>
+            <div className="mt-3 text-sm leading-6 text-emerald-50/85">Successful logins aligned with live session telemetry and audit visibility.</div>
           </div>
           <div className="rounded-[28px] border border-sky-200/45 bg-[linear-gradient(180deg,_rgba(59,130,246,0.24),_rgba(15,23,42,0.26))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-sm">
             <div className="mb-5 flex items-center justify-between">
@@ -6352,20 +7069,21 @@ function AdminNetworkPage() {
               </div>
             </div>
             <div className="text-4xl font-semibold tracking-tight text-slate-950">{latestLogin ? loginIp(latestLogin) : "-"}</div>
-            <div className="mt-3 text-sm leading-6 text-slate-600">{latestLogin ? `${latestLogin.userName || "Unknown user"} at ${formatDateTime(latestLogin.createdAt)}` : "No successful logins recorded yet."}</div>
+            <div className="mt-3 text-sm leading-6 text-slate-600">{latestLogin ? `${latestLogin.userName || "Unknown user"} at ${formatDateTime(latestLogin.occurredAt)}` : "No successful logins recorded yet."}</div>
           </div>
         </div>
       </section>
 
       <SectionCard
         title="Network workspace"
-        subtitle="Switch between rule administration, posture snapshots, persona views, and watchlists"
+        subtitle="Switch between rule administration, posture snapshots, persona views, plant monitoring, and watchlists"
         action={(
           <Tabs value={activeNetworkTab} onValueChange={setActiveNetworkTab} className="w-full">
-            <TabsList className="grid w-full max-w-[700px] grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 md:grid-cols-4">
+            <TabsList className="grid w-full max-w-[860px] grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 md:grid-cols-5">
               <TabsTrigger value="rules" className="rounded-xl text-sm">IP rules</TabsTrigger>
               <TabsTrigger value="posture" className="rounded-xl text-sm">Posture</TabsTrigger>
               <TabsTrigger value="personas" className="rounded-xl text-sm">Personas</TabsTrigger>
+              <TabsTrigger value="plants" className="rounded-xl text-sm">Plants</TabsTrigger>
               <TabsTrigger value="watchlist" className="rounded-xl text-sm">Watchlist</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -6375,6 +7093,7 @@ function AdminNetworkPage() {
           {activeNetworkTab === "rules" ? "Manage the allow, review, and block inventory in one focused subtab." : null}
           {activeNetworkTab === "posture" ? "Read the overall security posture without scrolling through lower-level tables." : null}
           {activeNetworkTab === "personas" ? "Investigate sign-ins by person and role rather than by IP." : null}
+          {activeNetworkTab === "plants" ? "Track which plants are seeing the most login activity and when." : null}
           {activeNetworkTab === "watchlist" ? "Review ingress patterns from the IP-first perspective." : null}
         </div>
       </SectionCard>
@@ -6502,7 +7221,7 @@ function AdminNetworkPage() {
               <MetricCard label="Allowed rules" value={allowedCount} hint="Ingress sources explicitly permitted by policy." icon={ShieldCheck} />
               <MetricCard label="Blocked rules" value={blockedCount} hint="Known endpoints currently denied from platform access." icon={Lock} tone="rose" />
               <MetricCard label="Review queue" value={reviewCount} hint="Addresses awaiting analyst disposition or follow-up." icon={TriangleAlert} tone="amber" />
-              <MetricCard label="Latest sign-in time" value={latestLogin ? formatDate(latestLogin.createdAt) : "-"} hint={latestLogin ? formatDateTime(latestLogin.createdAt) : "No login telemetry is available yet."} icon={Clock3} tone="blue" />
+              <MetricCard label="Latest sign-in time" value={latestLogin ? formatDate(latestLogin.occurredAt) : "-"} hint={latestLogin ? formatDateTime(latestLogin.occurredAt) : "No login telemetry is available yet."} icon={Clock3} tone="blue" />
             </div>
           ) : null}
         </SectionCard>
@@ -6519,7 +7238,7 @@ function AdminNetworkPage() {
             </div>
             <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Latest ingress</div>
-              <div className="mt-2 text-sm text-slate-700">{latestLogin ? `${latestLogin.userName || "Unknown user"} from ${loginIp(latestLogin)} at ${formatDateTime(latestLogin.createdAt)}` : "No login telemetry is available yet."}</div>
+              <div className="mt-2 text-sm text-slate-700">{latestLogin ? `${latestLogin.userName || "Unknown user"} from ${loginIp(latestLogin)} at ${formatDateTime(latestLogin.occurredAt)}` : "No login telemetry is available yet."}</div>
             </div>
           </div>
         </SectionCard>
@@ -6562,6 +7281,7 @@ function AdminNetworkPage() {
                     <th className="px-4 py-3 font-medium">IP footprint</th>
                     <th className="px-4 py-3 font-medium">Latest IP</th>
                     <th className="px-4 py-3 font-medium">Last seen</th>
+                    <th className="px-4 py-3 font-medium">Latest device</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white text-sm">
@@ -6574,9 +7294,68 @@ function AdminNetworkPage() {
                       <td className="px-4 py-4 text-slate-600">{Array.from(persona.ips).join(", ")}</td>
                       <td className="px-4 py-4 font-mono text-slate-600">{loginIp(persona.events[0])}</td>
                       <td className="px-4 py-4 text-slate-600">{formatDateTime(persona.lastSeen)}</td>
+                      <td className="px-4 py-4 text-slate-600">{persona.events[0]?.device || "Unknown device"} • {persona.events[0]?.system || "Unknown system"} • {persona.events[0]?.browser || "Unknown browser"}</td>
                     </tr>
                   ))}
-                  {!sortedPersonas.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">No personas matched the current filters.</td></tr> : null}
+                  {!sortedPersonas.length ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No personas matched the current filters.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+      </SectionCard>
+      ) : null}
+
+      {activeNetworkTab === "plants" ? (
+      <SectionCard title="Plant-wise login tracking" subtitle="Monitor login volume, identity spread, and latest access by plant" action={<ExportActions fileBaseName="plant-login-tracking" filteredRows={filteredPlantExportRows} allRows={allPlantExportRows} />}>
+        {loading ? <div className="text-sm text-slate-500">Collecting plant login activity...</div> : null}
+        {!loading && activityError ? <div className="text-sm text-[#BB0000]">{activityError}</div> : null}
+        {!loading && !activityError && plantLoginSummaries.length === 0 ? <div className="text-sm text-slate-500">No plant login activity is available yet.</div> : null}
+        {!loading && !activityError ? (
+          <>
+            <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <ValueHelp label="Plant" placeholder="All plants" emptyLabel="No matching plants." options={plantOptions} value={plantFilter} onChange={setPlantFilter} containerClassName="w-full" />
+              <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={plantRoleOptions} value={plantRoleFilter} onChange={setPlantRoleFilter} containerClassName="w-full" />
+              <ValueHelp label="Latest Login In" placeholder="Any time" emptyLabel="No matching date ranges." options={RELATIVE_DATE_PRESET_OPTIONS} value={plantDatePreset} onChange={setPlantDatePreset} containerClassName="w-full" clearLabel="Any time" clearDescription="Remove the latest-login filter" />
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">From Date</span>
+                <input type="date" value={plantDateFrom} onChange={(event) => setPlantDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Plant latest login from date" />
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">To Date</span>
+                <input type="date" value={plantDateTo} onChange={(event) => setPlantDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Plant latest login to date" />
+              </label>
+              <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={plantSortOptions} value={plantSort} onChange={setPlantSort} containerClassName="w-full" clearLabel="Most logins first" clearDescription="Reset to the default sort order" />
+              <div className="flex items-end">
+                <button type="button" onClick={() => { setPlantFilter(""); setPlantRoleFilter(""); setPlantDatePreset(""); setPlantDateFrom(""); setPlantDateTo(""); setPlantSort("logins-desc"); }} className="h-11 w-full min-w-[124px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-sm text-slate-500">
+                    <th className="px-4 py-3 font-medium">Plant</th>
+                    <th className="px-4 py-3 font-medium">Logins</th>
+                    <th className="px-4 py-3 font-medium">Users</th>
+                    <th className="px-4 py-3 font-medium">IPs</th>
+                    <th className="px-4 py-3 font-medium">Roles</th>
+                    <th className="px-4 py-3 font-medium">Browsers</th>
+                    <th className="px-4 py-3 font-medium">Latest login</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white text-sm">
+                  {sortedPlantSummaries.map((entry) => (
+                    <tr key={entry.plantId}>
+                      <td className="px-4 py-4 font-medium text-slate-900">{entry.plantName}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.logins}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.uniqueUsers}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.uniqueIps}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.roles.join(", ") || "-"}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.browsers.join(", ") || "-"}</td>
+                      <td className="px-4 py-4 text-slate-600">{formatDateTime(entry.latestLoginAt)}</td>
+                    </tr>
+                  ))}
+                  {!sortedPlantSummaries.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">No plants matched the current filters.</td></tr> : null}
                 </tbody>
               </table>
             </div>
@@ -6813,27 +7592,27 @@ function AdminSessionsPage() {
     return next;
   }, [blockedAttemptSort, filteredBlockedAttempts]);
   const allSessionExportRows = useMemo(
-    () => sessions.map((session) => ({ user: session.userName, email: session.userEmail, role: session.userRole, status: session.status, ip: session.clientIp, startedAt: session.startedAt, lastSeenAt: session.lastSeenAt, durationSeconds: session.durationSeconds, idleSeconds: session.idleSeconds, device: session.device, browser: session.browser, sessionId: session.sessionId })),
+    () => sessions.map((session) => ({ user: session.userName, email: session.userEmail, role: session.userRole, status: session.status, ip: session.clientIp, startedAt: session.startedAt, lastSeenAt: session.lastSeenAt, durationSeconds: session.durationSeconds, idleSeconds: session.idleSeconds, device: session.device, system: session.system, browser: session.browser, sessionId: session.sessionId })),
     [sessions],
   );
   const filteredSessionExportRows = useMemo(
-    () => sortedSessions.map((session) => ({ user: session.userName, email: session.userEmail, role: session.userRole, status: session.status, ip: session.clientIp, startedAt: session.startedAt, lastSeenAt: session.lastSeenAt, durationSeconds: session.durationSeconds, idleSeconds: session.idleSeconds, device: session.device, browser: session.browser, sessionId: session.sessionId })),
+    () => sortedSessions.map((session) => ({ user: session.userName, email: session.userEmail, role: session.userRole, status: session.status, ip: session.clientIp, startedAt: session.startedAt, lastSeenAt: session.lastSeenAt, durationSeconds: session.durationSeconds, idleSeconds: session.idleSeconds, device: session.device, system: session.system, browser: session.browser, sessionId: session.sessionId })),
     [sortedSessions],
   );
   const allOutsideSessionExportRows = useMemo(
-    () => outsideHoursSessions.map((session) => ({ user: session.userName, role: session.userRole, ip: session.clientIp, startedAt: session.startedAt, durationSeconds: session.durationSeconds, device: session.device, browser: session.browser, sessionId: session.sessionId })),
+    () => outsideHoursSessions.map((session) => ({ user: session.userName, role: session.userRole, ip: session.clientIp, startedAt: session.startedAt, durationSeconds: session.durationSeconds, device: session.device, system: session.system, browser: session.browser, sessionId: session.sessionId })),
     [outsideHoursSessions],
   );
   const filteredOutsideSessionExportRows = useMemo(
-    () => sortedOutsideSessions.map((session) => ({ user: session.userName, role: session.userRole, ip: session.clientIp, startedAt: session.startedAt, durationSeconds: session.durationSeconds, device: session.device, browser: session.browser, sessionId: session.sessionId })),
+    () => sortedOutsideSessions.map((session) => ({ user: session.userName, role: session.userRole, ip: session.clientIp, startedAt: session.startedAt, durationSeconds: session.durationSeconds, device: session.device, system: session.system, browser: session.browser, sessionId: session.sessionId })),
     [sortedOutsideSessions],
   );
   const allBlockedAttemptExportRows = useMemo(
-    () => outsideHoursAttempts.map((attempt) => ({ user: attempt.userName, role: attempt.userRole, ip: attempt.clientIp, attemptedAt: attempt.occurredAt, device: attempt.device, browser: attempt.browser, status: attempt.status })),
+    () => outsideHoursAttempts.map((attempt) => ({ user: attempt.userName, role: attempt.userRole, ip: attempt.clientIp, attemptedAt: attempt.occurredAt, device: attempt.device, system: attempt.system, browser: attempt.browser, status: attempt.status })),
     [outsideHoursAttempts],
   );
   const filteredBlockedAttemptExportRows = useMemo(
-    () => sortedBlockedAttempts.map((attempt) => ({ user: attempt.userName, role: attempt.userRole, ip: attempt.clientIp, attemptedAt: attempt.occurredAt, device: attempt.device, browser: attempt.browser, status: attempt.status })),
+    () => sortedBlockedAttempts.map((attempt) => ({ user: attempt.userName, role: attempt.userRole, ip: attempt.clientIp, attemptedAt: attempt.occurredAt, device: attempt.device, system: attempt.system, browser: attempt.browser, status: attempt.status })),
     [sortedBlockedAttempts],
   );
 
@@ -6897,7 +7676,7 @@ function AdminSessionsPage() {
                   <MetricCard label="Observed IPs" value={new Set([...outsideHoursSessions.map((item) => item.clientIp), ...outsideHoursAttempts.map((item) => item.clientIp)]).size} hint="Network origins tied to outside-hours access." icon={Network} tone="teal" />
                 </div>
 
-                <div className="mt-6 grid gap-6 xl:grid-cols-2">
+                <div className="mt-6 grid gap-6">
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3"><div className="text-base font-semibold text-slate-900">Flagged off-hours sessions</div><ExportActions fileBaseName="outside-hours-sessions" filteredRows={filteredOutsideSessionExportRows} allRows={allOutsideSessionExportRows} /></div>
                     <div className="grid gap-4 md:grid-cols-3">
@@ -6921,6 +7700,8 @@ function AdminSessionsPage() {
                             <th className="px-4 py-3 font-medium">Started</th>
                             <th className="px-4 py-3 font-medium">Duration</th>
                             <th className="px-4 py-3 font-medium">Device</th>
+                            <th className="px-4 py-3 font-medium">System</th>
+                            <th className="px-4 py-3 font-medium">Browser</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-amber-100 bg-white text-sm">
@@ -6931,10 +7712,12 @@ function AdminSessionsPage() {
                               <td className="px-4 py-4 font-mono text-slate-600">{session.clientIp}</td>
                               <td className="px-4 py-4 text-slate-600">{formatDateTime(session.startedAt)}</td>
                               <td className="px-4 py-4 text-slate-600">{formatDuration(session.durationSeconds)}</td>
-                              <td className="px-4 py-4 text-slate-600">{session.device || "Unknown device"} • {session.browser || "Unknown browser"}</td>
+                              <td className="px-4 py-4 text-slate-600">{session.device || "Unknown device"}</td>
+                              <td className="px-4 py-4 text-slate-600">{session.system || "Unknown system"}</td>
+                              <td className="px-4 py-4 text-slate-600">{session.browser || "Unknown browser"}</td>
                             </tr>
                           ))}
-                          {!sortedOutsideSessions.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">No outside-hours sessions matched the current filters.</td></tr> : null}
+                          {!sortedOutsideSessions.length ? <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No outside-hours sessions matched the current filters.</td></tr> : null}
                         </tbody>
                       </table>
                     </div>
@@ -6962,6 +7745,7 @@ function AdminSessionsPage() {
                             <th className="px-4 py-3 font-medium">IP</th>
                             <th className="px-4 py-3 font-medium">Attempted</th>
                             <th className="px-4 py-3 font-medium">Device</th>
+                            <th className="px-4 py-3 font-medium">System</th>
                             <th className="px-4 py-3 font-medium">Browser</th>
                           </tr>
                         </thead>
@@ -6973,10 +7757,11 @@ function AdminSessionsPage() {
                               <td className="px-4 py-4 font-mono text-slate-600">{attempt.clientIp}</td>
                               <td className="px-4 py-4 text-slate-600">{formatDateTime(attempt.occurredAt)}</td>
                               <td className="px-4 py-4 text-slate-600">{attempt.device || "Unknown device"}</td>
+                              <td className="px-4 py-4 text-slate-600">{attempt.system || "Unknown system"}</td>
                               <td className="px-4 py-4 text-slate-600">{attempt.browser || "Unknown browser"}</td>
                             </tr>
                           ))}
-                          {!sortedBlockedAttempts.length ? <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">No blocked attempts matched the current filters.</td></tr> : null}
+                          {!sortedBlockedAttempts.length ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">No blocked attempts matched the current filters.</td></tr> : null}
                         </tbody>
                       </table>
                     </div>
@@ -7028,6 +7813,8 @@ function AdminSessionsPage() {
                     <th className="px-4 py-3 font-medium">Duration</th>
                     <th className="px-4 py-3 font-medium">Idle</th>
                     <th className="px-4 py-3 font-medium">Device</th>
+                    <th className="px-4 py-3 font-medium">System</th>
+                    <th className="px-4 py-3 font-medium">Browser</th>
                     <th className="px-4 py-3 font-medium">Session ID</th>
                   </tr>
                 </thead>
@@ -7045,11 +7832,13 @@ function AdminSessionsPage() {
                       <td className="px-4 py-4 text-slate-600">{formatDateTime(session.lastSeenAt)}</td>
                       <td className="px-4 py-4 text-slate-600">{formatDuration(session.durationSeconds)}</td>
                       <td className="px-4 py-4 text-slate-600">{session.status === "Active" ? formatDuration(session.idleSeconds) : "-"}</td>
-                      <td className="px-4 py-4 text-slate-600">{session.device || "Unknown device"} • {session.browser || "Unknown browser"}</td>
+                      <td className="px-4 py-4 text-slate-600">{session.device || "Unknown device"}</td>
+                      <td className="px-4 py-4 text-slate-600">{session.system || "Unknown system"}</td>
+                      <td className="px-4 py-4 text-slate-600">{session.browser || "Unknown browser"}</td>
                       <td className="px-4 py-4 font-mono text-xs text-slate-500">{session.sessionId}</td>
                     </tr>
                   ))}
-                  {!sortedSessions.length ? <tr><td colSpan={10} className="px-4 py-10 text-center text-slate-500">No session records matched the current filters.</td></tr> : null}
+                  {!sortedSessions.length ? <tr><td colSpan={12} className="px-4 py-10 text-center text-slate-500">No session records matched the current filters.</td></tr> : null}
                 </tbody>
               </table>
             </div>
@@ -7136,29 +7925,29 @@ function AppContent() {
         children: [
           { index: true, element: <Navigate to={defaultHome(user.role)} replace /> },
           { path: "login", element: <Navigate to={defaultHome(user.role)} replace /> },
-          { path: "dashboard", element: <DashboardPage /> },
-          { path: "plants", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><PlantIndexPage /></RoleGate> },
-          { path: "projects", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><ProjectsIndexPage /></RoleGate> },
+          { path: "dashboard", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canAccessDashboard"><DashboardPage /></RoleGate> },
+          { path: "plants", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canAccessPlants"><PlantIndexPage /></RoleGate> },
+          { path: "projects", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canAccessProjects"><ProjectsIndexPage /></RoleGate> },
           { path: "plants/:plantId", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><PlantProjectsPage /></RoleGate> },
           { path: "plants/:plantId/projects/new", element: <RoleGate allowed={["Mining Manager"]} capability="canCreateProjects"><ProjectCreatePage /></RoleGate> },
           { path: "plants/:plantId/projects/:projectId/documents", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><ProjectDocumentsPage /></RoleGate> },
-          { path: "documents", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><DocumentsPage /></RoleGate> },
+          { path: "documents", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canAccessDocuments"><DocumentsPage /></RoleGate> },
           { path: "documents/:documentId", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><DocumentDetailPage /></RoleGate> },
-          { path: "analytics", element: <RoleGate allowed={["CEO", "Admin"]}><AnalyticsPage /></RoleGate> },
-          { path: "oversight", element: <RoleGate allowed={["CEO", "Admin"]} capability="canManageUsers"><ManagerOversightPage /></RoleGate> },
-          { path: "oversight/:userId", element: <RoleGate allowed={["CEO", "Admin"]} capability="canManageUsers"><ManagerDetailPage /></RoleGate> },
-          { path: "activity-logs", element: <RoleGate allowed={["CEO", "Admin"]}><ActivityLogsPage /></RoleGate> },
+          { path: "analytics", element: <RoleGate allowed={["CEO", "Admin"]} capability="canAccessAnalytics"><AnalyticsPage /></RoleGate> },
+          { path: "oversight", element: <RoleGate allowed={["CEO", "Admin"]} capability="canAccessUsers"><ManagerOversightPage /></RoleGate> },
+          { path: "oversight/:userId", element: <RoleGate allowed={["CEO", "Admin"]} capability="canAccessUsers"><ManagerDetailPage /></RoleGate> },
+          { path: "activity-logs", element: <RoleGate allowed={["CEO", "Admin"]} capability="canAccessAuditLogs"><ActivityLogsPage /></RoleGate> },
           { path: "upload", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canUploadDocuments"><ManagerUpload /></RoleGate> },
-          { path: "admin", element: <RoleGate allowed={["Admin"]}><AdminDashboardPage /></RoleGate> },
-          { path: "admin/users", element: <RoleGate allowed={["Admin", "CEO"]} capability="canManageUsers"><ManagerOversightPage /></RoleGate> },
-          { path: "admin/users/:userId", element: <RoleGate allowed={["Admin", "CEO"]} capability="canManageUsers"><ManagerDetailPage /></RoleGate> },
-          { path: "admin/master-data", element: <RoleGate allowed={["Admin", "CEO"]} capability="canManageUsers"><AdminMasterDataPage /></RoleGate> },
-          { path: "admin/access", element: <RoleGate allowed={["Admin"]}><AdminAccessPage /></RoleGate> },
-          { path: "admin/network", element: <RoleGate allowed={["Admin", "CEO"]} capability="canConfigureIp"><AdminNetworkPage /></RoleGate> },
-          { path: "admin/sessions", element: <RoleGate allowed={["CEO", "Admin"]}><AdminSessionsPage /></RoleGate> },
-          { path: "admin/activity-logs", element: <RoleGate allowed={["Admin"]}><ActivityLogsPage /></RoleGate> },
-          { path: "settings", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]}><SettingsPage /></RoleGate> },
-          { path: "admin/settings", element: <RoleGate allowed={["Admin"]}><SettingsPage /></RoleGate> },
+          { path: "admin", element: <RoleGate allowed={["Admin"]} capability="canAccessDashboard"><AdminDashboardPage /></RoleGate> },
+          { path: "admin/users", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessUsers"><ManagerOversightPage /></RoleGate> },
+          { path: "admin/users/:userId", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessUsers"><ManagerDetailPage /></RoleGate> },
+          { path: "admin/master-data", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessMasterData"><AdminMasterDataPage /></RoleGate> },
+          { path: "admin/access", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessAccessControl"><AdminAccessPage /></RoleGate> },
+          { path: "admin/network", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessIpConfiguration"><AdminNetworkPage /></RoleGate> },
+          { path: "admin/sessions", element: <RoleGate allowed={["CEO", "Admin"]} capability="canAccessSessions"><AdminSessionsPage /></RoleGate> },
+          { path: "admin/activity-logs", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessAuditLogs"><ActivityLogsPage /></RoleGate> },
+          { path: "settings", element: <RoleGate allowed={["CEO", "Mining Manager", "Admin"]} capability="canAccessSettings"><SettingsPage /></RoleGate> },
+          { path: "admin/settings", element: <RoleGate allowed={["Admin", "CEO"]} capability="canAccessSettings"><SettingsPage /></RoleGate> },
           { path: "*", element: <Navigate to={defaultHome(user.role)} replace /> },
         ],
       },

@@ -241,8 +241,7 @@ def _document_query_for_user(user: dict) -> dict:
     base = {"deleted_at": None}
     if user["role"] == "Mining Manager":
         assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
-        if assigned:
-            base["plant_id"] = {"$in": assigned}
+        base["plant_id"] = {"$in": assigned} if assigned else {"$in": []}
         base["uploaded_by_id"] = user["id"]
     return base
 
@@ -293,9 +292,11 @@ def _can_view_document(user: dict, document: dict) -> bool:
 
 
 def _can_download_document(user: dict, document: dict) -> bool:
-    if user["role"] == "CEO":
+    if user["role"] in {"CEO", "Admin"} and user_has_capability(user, "canDownloadDocuments", get_db()):
         return True
-    if user["role"] == "Admin":
+    if user["role"] != "Mining Manager":
+        return False
+    if not user_has_capability(user, "canDownloadDocuments", get_db()):
         return False
     assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
     return document.get("plant_id") in assigned and document.get("uploaded_by_id") == user["id"]

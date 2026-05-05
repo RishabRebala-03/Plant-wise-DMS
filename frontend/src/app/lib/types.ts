@@ -18,6 +18,19 @@ export interface User {
     plantsScope?: string;
     canCreateProjects?: boolean;
     canUploadDocuments?: boolean;
+    canDownloadDocuments?: boolean;
+    canAccessDashboard?: boolean;
+    canAccessPlants?: boolean;
+    canAccessProjects?: boolean;
+    canAccessDocuments?: boolean;
+    canAccessAnalytics?: boolean;
+    canAccessAuditLogs?: boolean;
+    canAccessSessions?: boolean;
+    canAccessSettings?: boolean;
+    canAccessUsers?: boolean;
+    canAccessMasterData?: boolean;
+    canAccessAccessControl?: boolean;
+    canAccessIpConfiguration?: boolean;
     canEditDocuments?: boolean;
     canDeleteDocuments?: boolean;
     canManageUsers?: boolean;
@@ -26,6 +39,19 @@ export interface User {
   capabilities?: {
     canCreateProjects?: boolean;
     canUploadDocuments?: boolean;
+    canDownloadDocuments?: boolean;
+    canAccessDashboard?: boolean;
+    canAccessPlants?: boolean;
+    canAccessProjects?: boolean;
+    canAccessDocuments?: boolean;
+    canAccessAnalytics?: boolean;
+    canAccessAuditLogs?: boolean;
+    canAccessSessions?: boolean;
+    canAccessSettings?: boolean;
+    canAccessUsers?: boolean;
+    canAccessMasterData?: boolean;
+    canAccessAccessControl?: boolean;
+    canAccessIpConfiguration?: boolean;
     canEditDocuments?: boolean;
     canDeleteDocuments?: boolean;
     canManageUsers?: boolean;
@@ -159,10 +185,13 @@ export interface SessionRecord {
   userName?: string | null;
   userEmail?: string | null;
   userRole?: string | null;
+  plantId?: string | null;
+  plantName?: string | null;
   clientIp: string;
   userAgent?: string | null;
   browser?: string | null;
   device?: string | null;
+  system?: string | null;
   startedAt: string | null;
   lastSeenAt: string | null;
   endedAt: string | null;
@@ -177,13 +206,48 @@ export interface OutsideHoursAttempt {
   userId?: string | null;
   userName?: string | null;
   userRole?: string | null;
+  plantId?: string | null;
+  plantName?: string | null;
   clientIp: string;
   occurredAt: string | null;
   detail?: string | null;
   browser?: string | null;
   device?: string | null;
+  system?: string | null;
   userAgent?: string | null;
   status?: string | null;
+}
+
+export interface LoginTrackingEvent {
+  id: string;
+  sessionId?: string | null;
+  userId?: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
+  userRole?: string | null;
+  plantId?: string | null;
+  plantName?: string | null;
+  clientIp: string;
+  userAgent?: string | null;
+  browser?: string | null;
+  device?: string | null;
+  system?: string | null;
+  occurredAt: string | null;
+  status: "Succeeded";
+  source?: string | null;
+}
+
+export interface PlantLoginSummary {
+  plantId: string;
+  plantName: string;
+  logins: number;
+  uniqueUsers: number;
+  uniqueIps: number;
+  latestLoginAt: string | null;
+  users: string[];
+  ips: string[];
+  roles: string[];
+  browsers: string[];
 }
 
 export interface GovernancePolicy {

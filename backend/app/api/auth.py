@@ -38,6 +38,8 @@ def _insert_auth_activity(action: str, user: dict, **metadata):
             "metadata": {
                 "role": user.get("role"),
                 "email": user.get("email"),
+                "plantId": user.get("plant_id") or next(iter(user.get("assigned_plant_ids", [])), None),
+                "plantName": user.get("plant_name") or next(iter(user.get("assigned_plant_names", [])), None),
                 **metadata,
             },
             "created_at": utc_now(),
@@ -138,7 +140,12 @@ def login():
             resource_id=user["id"],
             status="blocked",
             severity="high",
-            metadata={"reason": "outside_business_hours", "clientIp": client_ip},
+            metadata={
+                "reason": "outside_business_hours",
+                "clientIp": client_ip,
+                "plantId": user.get("plant_id") or next(iter(user.get("assigned_plant_ids", [])), None),
+                "plantName": user.get("plant_name") or next(iter(user.get("assigned_plant_names", [])), None),
+            },
         )
         queue_security_alert(
             "outside_business_hours_login",
@@ -167,7 +174,12 @@ def login():
         user=refreshed_user,
         resource_type="auth",
         resource_id=refreshed_user["id"],
-        metadata={"clientIp": client_ip, "sessionId": refreshed_user.get("active_session_id")},
+        metadata={
+            "clientIp": client_ip,
+            "sessionId": refreshed_user.get("active_session_id"),
+            "plantId": refreshed_user.get("plant_id") or next(iter(refreshed_user.get("assigned_plant_ids", [])), None),
+            "plantName": refreshed_user.get("plant_name") or next(iter(refreshed_user.get("assigned_plant_names", [])), None),
+        },
     )
     return success_response({"user": serialize_user(refreshed_user), **tokens})
 

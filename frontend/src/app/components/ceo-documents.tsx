@@ -5,6 +5,7 @@ import {
   Lock, Globe, SlidersHorizontal, X, RefreshCw, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { LIVE_SYNC_INTERVAL_MS, categoryOptions, documentsApi, plantsApi } from "../lib/api";
+import { getDocumentTimestamp } from "../lib/datetime";
 import { exportRowsToCsv, exportRowsToExcel } from "../lib/export";
 import type { Comment, DocumentRecord, Plant } from "../lib/types";
 import { DocumentDrawer } from "./document-drawer";
@@ -22,7 +23,7 @@ const DOCUMENT_COLUMNS: Array<{
   { id: "plant", label: "Plant", weight: 1.1, minWidth: 170 },
   { id: "category", label: "Category", weight: 1.1, minWidth: 170 },
   { id: "uploadedBy", label: "Uploaded By", weight: 0.95, minWidth: 150 },
-  { id: "date", label: "Date", weight: 1.15, minWidth: 170 },
+  { id: "date", label: "Uploaded", weight: 1.15, minWidth: 170 },
   { id: "notes", label: "CEO Notes", weight: 1.4, minWidth: 230 },
   { id: "actions", label: "Actions", weight: 1.1, minWidth: 170 },
 ];
@@ -188,7 +189,7 @@ export function CeoDocuments() {
       plant: document.plant,
       category: document.category,
       uploadedBy: document.uploadedBy,
-      uploadedAt: document.date,
+      uploadedAt: getDocumentTimestamp(document),
       status: document.status,
     })),
     [documents],
@@ -199,7 +200,7 @@ export function CeoDocuments() {
       plant: document.plant,
       category: document.category,
       uploadedBy: document.uploadedBy,
-      uploadedAt: document.date,
+      uploadedAt: getDocumentTimestamp(document),
       status: document.status,
     })),
     [visibleDocuments],
@@ -415,7 +416,7 @@ export function CeoDocuments() {
                     }
 
                     if (column.id === "date") {
-                      return <td key={column.id} className="px-5 py-4 align-top text-[#6a6d70]" style={{ fontSize: 13 }}>{document.date || "-"}</td>;
+                      return <td key={column.id} className="px-5 py-4 align-top text-[#6a6d70]" style={{ fontSize: 13 }}>{getDocumentTimestamp(document)}</td>;
                     }
 
                     if (column.id === "notes") {

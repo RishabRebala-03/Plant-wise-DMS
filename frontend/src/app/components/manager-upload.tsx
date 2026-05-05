@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowRight, Clock3, FileText, FolderKanban, Paperclip, TriangleAlert, Upload, UploadCloud } from "lucide-react";
-import { ApiError, LIVE_SYNC_INTERVAL_MS, categoryOptions, dashboardApi, documentsApi, plantsApi, settingsApi } from "../lib/api";
+import { ApiError, LIVE_SYNC_INTERVAL_MS, categoryOptions, dashboardApi, documentsApi, plantsApi, projectsApi, settingsApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { getDocumentTimestamp } from "../lib/datetime";
 import type { DocumentRecord, GovernancePolicy, ManagerDashboardData, Plant } from "../lib/types";
-import { assignDocumentToProject, persistPortalState, readPortalState, type ProjectRecord } from "../lib/portal";
+import type { ProjectRecord } from "../lib/portal";
 import { DocumentDrawer } from "./document-drawer";
 
 function scopedPlantIds(user: { assignedPlantIds?: string[]; plantId?: string | null }) {
@@ -104,10 +105,10 @@ export function ManagerUpload() {
   const uploadAllowedNow = useMemo(() => isWithinGovernanceBusinessHours(governancePolicy), [governancePolicy]);
 
   async function load() {
-    const [dashboard, plantsResult, documentsResult, governanceResult] = await Promise.all([
+    const [dashboard, plantsResult, projectsResult, governanceResult] = await Promise.all([
       dashboardApi.manager(),
       plantsApi.list(),
-      documentsApi.list({ page: 1, pageSize: 500 }),
+      projectsApi.list({ page: 1, pageSize: 500 }),
       settingsApi.getGovernancePolicy().catch((error) => {
         if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
           return governancePolicy;
@@ -116,8 +117,7 @@ export function ManagerUpload() {
       }),
     ]);
     const scopedPlants = plantsResult.items.filter((plant) => allowedPlantIds.includes(plant.id));
-    const portalState = readPortalState(plantsResult.items, documentsResult.items);
-    const scopedProjects = portalState.projects.filter((project) => allowedPlantIds.includes(project.plantId));
+    const scopedProjects = (projectsResult.items as ProjectRecord[]).filter((project) => allowedPlantIds.includes(project.plantId));
     const scopedUploads = dashboard.recentUploads.filter((document) => allowedPlantIds.includes(document.plantId));
 
     setData({ ...dashboard, recentUploads: scopedUploads });
@@ -224,9 +224,6 @@ export function ManagerUpload() {
     setMessageType("");
     try {
       const created = await documentsApi.create(formData);
-      const latestDocuments = await documentsApi.list({ page: 1, pageSize: 500 });
-      const portalState = readPortalState(plants, latestDocuments.items);
-      persistPortalState(assignDocumentToProject(portalState, created.id, form.projectId));
       setForm({
         company: "Midwest Ltd",
         plant: allowedPlantIds[0] || "",
@@ -269,19 +266,22 @@ export function ManagerUpload() {
   if (!data) return <div className="p-7 text-[#BB0000]">{message || "Upload workspace unavailable."}</div>;
 
   const acceptTypes = governancePolicy.allowedUploadFormats.map((value) => `.${value}`).join(",");
+  const uploadGreetingName = user?.firstName || user?.name?.split(" ")[0] || "there";
+  const uploadTitle = user?.role === "Admin" ? `Welcome back, ${uploadGreetingName}` : "Upload documents";
+  const uploadSubtitle = user?.role === "Admin"
+    ? "Use this page to upload and review documents."
+    : "Use this page to upload documents for your plant scope.";
 
   return (
     <div className="space-y-6">
       <section className="rounded-[32px] bg-[linear-gradient(135deg,_#0f172a,_#164e63)] px-6 py-8 text-white shadow-[0_28px_70px_rgba(15,23,42,0.2)]">
         <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="max-w-3xl">
+          <div className="min-w-0 max-w-3xl flex-1">
             <div className="text-xs uppercase tracking-[0.26em] text-white/55">Upload workspace</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">Submit documents inside your assigned operating scope</h1>
-            <p className="mt-3 text-sm leading-6 text-white/72">
-              Plants, projects, and recent uploads shown here are limited to what is assigned to your account. The upload flow uses structured tables, guided selections, and clearer review states.
-            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight">{uploadTitle}</h1>
+            <p className="mt-3 text-sm leading-6 text-white/72">{uploadSubtitle}</p>
           </div>
-          <div className="grid min-w-[280px] gap-3 rounded-[28px] border border-white/10 bg-white/6 p-4">
+          <div className="grid w-full max-w-[380px] gap-3 rounded-[28px] border border-white/10 bg-white/6 p-4">
             <button onClick={() => navigate("/documents")} className="rounded-2xl bg-white px-4 py-3 text-left text-sm font-semibold text-slate-950 transition hover:bg-slate-100">
               Open document listing
             </button>
@@ -331,7 +331,7 @@ export function ManagerUpload() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+        <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Document submission</h2>
@@ -508,7 +508,7 @@ export function ManagerUpload() {
           </form>
         </section>
 
-        <section className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+        <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Recent uploads in your scope</h2>
             <p className="mt-1 text-sm text-slate-500">Only documents tied to your assigned plants are listed here.</p>
@@ -521,7 +521,7 @@ export function ManagerUpload() {
                     <th>Document</th>
                     <th>Plant</th>
                     <th>Category</th>
-                    <th>Date</th>
+                    <th>Uploaded</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -532,7 +532,7 @@ export function ManagerUpload() {
                         <td className="text-strong">{document.name}</td>
                         <td>{document.plant}</td>
                         <td>{document.category}</td>
-                        <td>{document.date || "-"}</td>
+                        <td>{getDocumentTimestamp(document)}</td>
                         <td>
                           <button onClick={() => void openDocument(document)} className="text-[#0A6ED1] hover:underline">
                             Open

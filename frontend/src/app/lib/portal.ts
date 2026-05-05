@@ -23,6 +23,19 @@ export interface AccessRule {
   plantsScope: string;
   canCreateProjects: boolean;
   canUploadDocuments: boolean;
+  canDownloadDocuments: boolean;
+  canAccessDashboard: boolean;
+  canAccessPlants: boolean;
+  canAccessProjects: boolean;
+  canAccessDocuments: boolean;
+  canAccessAnalytics: boolean;
+  canAccessAuditLogs: boolean;
+  canAccessSessions: boolean;
+  canAccessSettings: boolean;
+  canAccessUsers: boolean;
+  canAccessMasterData: boolean;
+  canAccessAccessControl: boolean;
+  canAccessIpConfiguration: boolean;
   canEditDocuments: boolean;
   canDeleteDocuments: boolean;
   canManageUsers: boolean;
@@ -55,6 +68,19 @@ export interface PortalState {
 export type AccessCapability =
   | "canCreateProjects"
   | "canUploadDocuments"
+  | "canDownloadDocuments"
+  | "canAccessDashboard"
+  | "canAccessPlants"
+  | "canAccessProjects"
+  | "canAccessDocuments"
+  | "canAccessAnalytics"
+  | "canAccessAuditLogs"
+  | "canAccessSessions"
+  | "canAccessSettings"
+  | "canAccessUsers"
+  | "canAccessMasterData"
+  | "canAccessAccessControl"
+  | "canAccessIpConfiguration"
   | "canEditDocuments"
   | "canDeleteDocuments"
   | "canManageUsers"
@@ -112,6 +138,19 @@ const DEFAULT_ACCESS_RULES: AccessRule[] = [
     plantsScope: "All plants",
     canCreateProjects: false,
     canUploadDocuments: false,
+    canDownloadDocuments: true,
+    canAccessDashboard: true,
+    canAccessPlants: true,
+    canAccessProjects: true,
+    canAccessDocuments: true,
+    canAccessAnalytics: true,
+    canAccessAuditLogs: true,
+    canAccessSessions: true,
+    canAccessSettings: true,
+    canAccessUsers: true,
+    canAccessMasterData: true,
+    canAccessAccessControl: true,
+    canAccessIpConfiguration: false,
     canEditDocuments: true,
     canDeleteDocuments: true,
     canManageUsers: true,
@@ -122,6 +161,19 @@ const DEFAULT_ACCESS_RULES: AccessRule[] = [
     plantsScope: "Assigned plant only",
     canCreateProjects: true,
     canUploadDocuments: true,
+    canDownloadDocuments: false,
+    canAccessDashboard: true,
+    canAccessPlants: true,
+    canAccessProjects: true,
+    canAccessDocuments: true,
+    canAccessAnalytics: false,
+    canAccessAuditLogs: false,
+    canAccessSessions: false,
+    canAccessSettings: true,
+    canAccessUsers: false,
+    canAccessMasterData: false,
+    canAccessAccessControl: false,
+    canAccessIpConfiguration: false,
     canEditDocuments: false,
     canDeleteDocuments: false,
     canManageUsers: false,
@@ -132,6 +184,19 @@ const DEFAULT_ACCESS_RULES: AccessRule[] = [
     plantsScope: "Governance view",
     canCreateProjects: false,
     canUploadDocuments: false,
+    canDownloadDocuments: true,
+    canAccessDashboard: true,
+    canAccessPlants: true,
+    canAccessProjects: true,
+    canAccessDocuments: true,
+    canAccessAnalytics: true,
+    canAccessAuditLogs: true,
+    canAccessSessions: true,
+    canAccessSettings: true,
+    canAccessUsers: true,
+    canAccessMasterData: true,
+    canAccessAccessControl: true,
+    canAccessIpConfiguration: true,
     canEditDocuments: true,
     canDeleteDocuments: true,
     canManageUsers: true,

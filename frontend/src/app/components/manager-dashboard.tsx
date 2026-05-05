@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { LIVE_SYNC_INTERVAL_MS, dashboardApi, documentsApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { getDocumentTimestamp } from "../lib/datetime";
 import type { DocumentRecord, ManagerDashboardData } from "../lib/types";
 import { DocumentDrawer } from "./document-drawer";
 
@@ -138,7 +139,7 @@ export function ManagerDashboard() {
           <table className="data-table">
             <thead>
               <tr className="bg-[#fafafa] text-left border-b border-[#f0f0f0]">
-                {["Document Name", "Category", "Date"].map((heading) => (
+                {["Document Name", "Category", "Uploaded"].map((heading) => (
                   <th key={heading} className="px-5 py-3 text-[#6a6d70]" style={{ fontSize: 12, fontWeight: 500 }}>
                     {heading}
                   </th>
@@ -158,7 +159,7 @@ export function ManagerDashboard() {
                     </button>
                   </td>
                   <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.category}</td>
-                  <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.date || "-"}</td>
+                  <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{getDocumentTimestamp(document)}</td>
                 </tr>
               ))}
             </tbody>

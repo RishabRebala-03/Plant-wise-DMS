@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { LIVE_SYNC_INTERVAL_MS, dashboardApi } from "../lib/api";
+import { getDocumentTimestamp } from "../lib/datetime";
 import type { CeoDashboardData } from "../lib/types";
 
 export function CeoDashboard() {
@@ -213,7 +214,7 @@ export function CeoDashboard() {
         <table className="data-table">
           <thead>
             <tr className="bg-[#fafafa] text-left border-b border-[#f0f0f0]">
-              {["Document Name", "Plant", "Category", "Date"].map((heading) => (
+              {["Document Name", "Plant", "Category", "Uploaded"].map((heading) => (
                 <th key={heading} className="px-5 py-3 text-[#6a6d70]" style={{ fontSize: 12, fontWeight: 500 }}>
                   {heading}
                 </th>
@@ -226,7 +227,7 @@ export function CeoDashboard() {
                 <td className="px-5 py-4 text-[#333]" style={{ fontSize: 13, fontWeight: 500 }}>{document.name}</td>
                 <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.plant}</td>
                 <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.category}</td>
-                <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{document.date || "-"}</td>
+                <td className="px-5 py-4 text-[#6a6d70]" style={{ fontSize: 13 }}>{getDocumentTimestamp(document)}</td>
               </tr>
             ))}
           </tbody>

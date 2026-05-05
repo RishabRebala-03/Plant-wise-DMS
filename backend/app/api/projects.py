@@ -20,6 +20,7 @@ def _serialize_project(project: dict) -> dict:
         "code": project.get("code", ""),
         "description": project.get("description", ""),
         "owner": project.get("owner_name", "Unassigned"),
+        "ownerId": project.get("owner_id"),
         "status": project.get("status", "Active"),
         "createdAt": project.get("created_at").date().isoformat() if project.get("created_at") else None,
         "dueDate": project.get("due_date"),
@@ -33,7 +34,12 @@ def _visible_query(user: dict) -> dict:
     if user.get("role") != "Mining Manager":
         return {}
     assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
-    return {"plant_id": {"$in": assigned}} if assigned else {"plant_id": {"$in": []}}
+    if not assigned:
+        return {"plant_id": {"$in": []}}
+    return {
+        "plant_id": {"$in": assigned},
+        "owner_name": user["name"],
+    }
 
 
 @projects_bp.get("/projects")
@@ -87,9 +93,10 @@ def list_project_documents(project_id: str):
     if not project:
         return error_response("Project not found", 404)
     user = current_user()
-    visible_query = _visible_query(user)
-    if visible_query and project.get("plant_id") not in visible_query.get("plant_id", {}).get("$in", []):
-        return error_response("Project not found", 404)
+    if user.get("role") == "Mining Manager":
+        assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
+        if project.get("plant_id") not in assigned or project.get("owner_name") != user["name"]:
+            return error_response("Project not found", 404)
     page, page_size = get_pagination()
     query = _document_query_for_user(user)
     query["project_id"] = project_id
@@ -136,6 +143,7 @@ def create_project():
         "name": name,
         "code": code or name[:6].upper().replace(" ", ""),
         "description": description,
+        "owner_id": user["id"],
         "owner_name": user["name"],
         "status": "Active",
         "created_at": now,

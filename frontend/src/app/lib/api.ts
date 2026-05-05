@@ -9,9 +9,11 @@ import type {
   ManagerDashboardData,
   MessageEntry,
   MessageThread,
+  LoginTrackingEvent,
   NotificationItem,
   OutsideHoursAttempt,
   Plant,
+  PlantLoginSummary,
   SessionRecord,
   User,
 } from "./types";
@@ -547,7 +549,11 @@ export const settingsApi = {
     return apiFetch<{ items: Array<{ id: string; label: string; address: string; status: "Allowed" | "Blocked" | "Review"; lastUpdated: string | null }> }>("/settings/ip-rules");
   },
   listSessions() {
-    return apiFetch<{ items: SessionRecord[]; outsideBusinessHours: { sessions: SessionRecord[]; blockedAttempts: OutsideHoursAttempt[] } }>("/settings/sessions");
+    return apiFetch<{
+      items: SessionRecord[];
+      outsideBusinessHours: { sessions: SessionRecord[]; blockedAttempts: OutsideHoursAttempt[] };
+      loginTracking: { items: LoginTrackingEvent[]; plantSummaries: PlantLoginSummary[] };
+    }>("/settings/sessions");
   },
   getGovernancePolicy() {
     return apiFetch<GovernancePolicy>("/settings/governance-policy");
@@ -566,6 +572,19 @@ export const settingsApi = {
         plantsScope: string;
         canCreateProjects: boolean;
         canUploadDocuments: boolean;
+        canDownloadDocuments: boolean;
+        canAccessDashboard: boolean;
+        canAccessPlants: boolean;
+        canAccessProjects: boolean;
+        canAccessDocuments: boolean;
+        canAccessAnalytics: boolean;
+        canAccessAuditLogs: boolean;
+        canAccessSessions: boolean;
+        canAccessSettings: boolean;
+        canAccessUsers: boolean;
+        canAccessMasterData: boolean;
+        canAccessAccessControl: boolean;
+        canAccessIpConfiguration: boolean;
         canEditDocuments: boolean;
         canDeleteDocuments: boolean;
         canManageUsers: boolean;
@@ -580,6 +599,19 @@ export const settingsApi = {
         plantsScope: string;
         canCreateProjects: boolean;
         canUploadDocuments: boolean;
+        canDownloadDocuments: boolean;
+        canAccessDashboard: boolean;
+        canAccessPlants: boolean;
+        canAccessProjects: boolean;
+        canAccessDocuments: boolean;
+        canAccessAnalytics: boolean;
+        canAccessAuditLogs: boolean;
+        canAccessSessions: boolean;
+        canAccessSettings: boolean;
+        canAccessUsers: boolean;
+        canAccessMasterData: boolean;
+        canAccessAccessControl: boolean;
+        canAccessIpConfiguration: boolean;
         canEditDocuments: boolean;
         canDeleteDocuments: boolean;
         canManageUsers: boolean;

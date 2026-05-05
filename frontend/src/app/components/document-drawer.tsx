@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Save, Lock, Globe, MessageSquare, Download } from "lucide-react";
 import { categoryOptions } from "../lib/api";
+import { formatDetailedTimestamp, getDocumentTimestamp } from "../lib/datetime";
 import type { Comment, DocumentRecord } from "../lib/types";
 import { documentsApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -53,7 +54,10 @@ export function DocumentDrawer({
   const showCommentComposer = Boolean(onAddComment);
   const hasAttachedFile = Boolean(doc.file?.storageId);
   const showUpdateForm = Boolean(onUpdateDocument);
-  const canDownload = user?.role === "CEO" || (user?.role === "Mining Manager" && doc.uploadedById === user.id);
+  const canDownload = Boolean(user?.capabilities?.canDownloadDocuments)
+    && (user?.role === "CEO"
+      || user?.role === "Admin"
+      || (user?.role === "Mining Manager" && doc.uploadedById === user.id));
   const detailRows = [
     ["Document ID", doc.id],
     ["Document Name", doc.name],
@@ -63,14 +67,13 @@ export function DocumentDrawer({
     ["Category", doc.category],
     ["Status", doc.status],
     ["Uploaded By", doc.uploadedBy],
-    ["Upload Date", doc.date ? new Date(doc.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "-"],
-    ["Upload Time", doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : (doc.date ? new Date(doc.date).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "-")],
+    ["Uploaded At", getDocumentTimestamp(doc)],
     ["Version", `v${doc.version}`],
     ["Original File", fileName || doc.file?.name || "Not attached"],
     ["File Type", doc.file?.contentType || "Not available"],
     ["File Size", formatFileSize(doc.file?.sizeBytes)],
-    ["Created At", doc.createdAt ? new Date(doc.createdAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "-"],
-    ["Last Updated", doc.updatedAt ? new Date(doc.updatedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "-"],
+    ["Created At", formatDetailedTimestamp(doc.createdAt)],
+    ["Last Updated", formatDetailedTimestamp(doc.updatedAt)],
   ];
 
   useEffect(() => {
@@ -195,7 +198,7 @@ export function DocumentDrawer({
                         <td>{doc.plant}</td>
                         <td>v{doc.version}</td>
                         <td>{doc.uploadedBy}</td>
-                        <td>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : (doc.date || "Date unavailable")}</td>
+                        <td>{getDocumentTimestamp(doc, "Date unavailable")}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -224,7 +227,7 @@ export function DocumentDrawer({
                 </div>
                 {hasAttachedFile && !canDownload ? (
                   <div className="mt-4 rounded-2xl border border-[#dce4f0] bg-[#f8fbff] px-4 py-3 text-[#425466]" style={{ fontSize: 12 }}>
-                    Downloads are restricted. CEOs have full access, and managers can only download documents they uploaded themselves.
+                    Downloads are restricted. Managers can only download their own documents when CEO/Admin grant download access.
                   </div>
                 ) : null}
                 {fileError && (

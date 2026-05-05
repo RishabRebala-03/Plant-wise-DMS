@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+from collections import defaultdict
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint
@@ -65,12 +66,25 @@ def _serialize_access_rule(rule: dict) -> dict:
     return {
         "role": rule.get("role"),
         "plantsScope": rule.get("plantsScope", fallback["plantsScope"]),
-        "canCreateProjects": bool(rule.get("canCreateProjects")),
-        "canUploadDocuments": bool(rule.get("canUploadDocuments")),
-        "canEditDocuments": bool(rule.get("canEditDocuments")),
-        "canDeleteDocuments": bool(rule.get("canDeleteDocuments")),
-        "canManageUsers": bool(rule.get("canManageUsers")),
-        "canConfigureIp": bool(rule.get("canConfigureIp")),
+        "canCreateProjects": bool(rule.get("canCreateProjects", fallback.get("canCreateProjects"))),
+        "canUploadDocuments": bool(rule.get("canUploadDocuments", fallback.get("canUploadDocuments"))),
+        "canDownloadDocuments": bool(rule.get("canDownloadDocuments", fallback.get("canDownloadDocuments"))),
+        "canAccessDashboard": bool(rule.get("canAccessDashboard", fallback.get("canAccessDashboard"))),
+        "canAccessPlants": bool(rule.get("canAccessPlants", fallback.get("canAccessPlants"))),
+        "canAccessProjects": bool(rule.get("canAccessProjects", fallback.get("canAccessProjects"))),
+        "canAccessDocuments": bool(rule.get("canAccessDocuments", fallback.get("canAccessDocuments"))),
+        "canAccessAnalytics": bool(rule.get("canAccessAnalytics", fallback.get("canAccessAnalytics"))),
+        "canAccessAuditLogs": bool(rule.get("canAccessAuditLogs", fallback.get("canAccessAuditLogs"))),
+        "canAccessSessions": bool(rule.get("canAccessSessions", fallback.get("canAccessSessions"))),
+        "canAccessSettings": bool(rule.get("canAccessSettings", fallback.get("canAccessSettings"))),
+        "canAccessUsers": bool(rule.get("canAccessUsers", fallback.get("canAccessUsers"))),
+        "canAccessMasterData": bool(rule.get("canAccessMasterData", fallback.get("canAccessMasterData"))),
+        "canAccessAccessControl": bool(rule.get("canAccessAccessControl", fallback.get("canAccessAccessControl"))),
+        "canAccessIpConfiguration": bool(rule.get("canAccessIpConfiguration", fallback.get("canAccessIpConfiguration"))),
+        "canEditDocuments": bool(rule.get("canEditDocuments", fallback.get("canEditDocuments"))),
+        "canDeleteDocuments": bool(rule.get("canDeleteDocuments", fallback.get("canDeleteDocuments"))),
+        "canManageUsers": bool(rule.get("canManageUsers", fallback.get("canManageUsers"))),
+        "canConfigureIp": bool(rule.get("canConfigureIp", fallback.get("canConfigureIp"))),
     }
 
 
@@ -87,10 +101,13 @@ def _serialize_session(session: dict, user: dict | None = None) -> dict:
         "userName": user.get("name") if user else None,
         "userEmail": user.get("email") if user else None,
         "userRole": user.get("role") if user else None,
+        "plantId": _primary_plant_id(user),
+        "plantName": _primary_plant_name(user),
         "clientIp": session.get("client_ip") or "unknown",
         "userAgent": session.get("user_agent") or "",
         "browser": _browser_label(session.get("user_agent") or ""),
         "device": _device_label(session.get("user_agent") or ""),
+        "system": _system_label(session.get("user_agent") or ""),
         "startedAt": to_iso(started_at),
         "lastSeenAt": to_iso(last_seen_at),
         "endedAt": to_iso(revoked_at),
@@ -139,11 +156,14 @@ def _serialize_outside_hours_event(audit_log: dict) -> dict:
         "userId": audit_log.get("user_id"),
         "userName": audit_log.get("user_name"),
         "userRole": audit_log.get("user_role"),
+        "plantId": metadata.get("plantId"),
+        "plantName": metadata.get("plantName"),
         "clientIp": audit_log.get("client_ip") or metadata.get("clientIp") or "unknown",
         "occurredAt": to_iso(audit_log.get("created_at")),
         "detail": audit_log.get("action"),
         "browser": _browser_label(user_agent),
         "device": _device_label(user_agent),
+        "system": _system_label(user_agent),
         "userAgent": user_agent,
         "status": audit_log.get("status"),
     }
@@ -177,6 +197,91 @@ def _device_label(user_agent: str) -> str:
     if "linux" in value:
         return "Linux device"
     return "Unknown device"
+
+
+def _system_label(user_agent: str) -> str:
+    value = user_agent.lower()
+    if "windows nt 10.0" in value:
+        return "Windows 10/11"
+    if "windows nt 6.3" in value:
+        return "Windows 8.1"
+    if "windows nt 6.1" in value:
+        return "Windows 7"
+    if "iphone" in value or "cpu iphone os" in value:
+        return "iOS"
+    if "ipad" in value or "cpu os" in value:
+        return "iPadOS"
+    if "android" in value:
+        return "Android"
+    if "mac os x" in value or "macintosh" in value:
+        return "macOS"
+    if "linux" in value:
+        return "Linux"
+    return "Unknown system"
+
+
+def _primary_plant_id(user: dict | None) -> str | None:
+    if not user:
+        return None
+    return user.get("plant_id") or next(iter(user.get("assigned_plant_ids", [])), None)
+
+
+def _primary_plant_name(user: dict | None) -> str | None:
+    if not user:
+        return None
+    return user.get("plant_name") or next(iter(user.get("assigned_plant_names", [])), None)
+
+
+def _serialize_login_event(activity: dict, user: dict | None, session: dict | None) -> dict:
+    metadata = activity.get("metadata") or {}
+    session_user_agent = session.get("user_agent") if session else ""
+    user_agent = session_user_agent or str(metadata.get("userAgent") or "")
+    client_ip = (
+        session.get("client_ip")
+        if session and session.get("client_ip")
+        else str(metadata.get("clientIp") or activity.get("client_ip") or "unknown")
+    )
+    plant_id = _primary_plant_id(user) or metadata.get("plantId")
+    plant_name = _primary_plant_name(user) or metadata.get("plantName")
+    return {
+        "id": activity.get("id"),
+        "sessionId": metadata.get("sessionId") or (session.get("session_id") if session else None),
+        "userId": activity.get("user_id"),
+        "userName": activity.get("user_name"),
+        "userEmail": user.get("email") if user else metadata.get("email"),
+        "userRole": user.get("role") if user else metadata.get("role"),
+        "plantId": plant_id,
+        "plantName": plant_name,
+        "clientIp": client_ip,
+        "userAgent": user_agent,
+        "browser": _browser_label(user_agent),
+        "device": _device_label(user_agent),
+        "system": _system_label(user_agent),
+        "occurredAt": to_iso(activity.get("created_at")),
+        "status": "Succeeded",
+        "source": "activity+session" if session else "activity",
+    }
+
+
+def _serialize_plant_login_summary(plant_id: str, entries: list[dict]) -> dict:
+    latest = max((entry.get("occurredAt") for entry in entries if entry.get("occurredAt")), default=None)
+    unique_users = sorted({entry.get("userName") for entry in entries if entry.get("userName")})
+    unique_ips = sorted({entry.get("clientIp") for entry in entries if entry.get("clientIp")})
+    browsers = sorted({entry.get("browser") for entry in entries if entry.get("browser")})
+    roles = sorted({entry.get("userRole") for entry in entries if entry.get("userRole")})
+    primary_name = next((entry.get("plantName") for entry in entries if entry.get("plantName")), "Unassigned")
+    return {
+        "plantId": plant_id,
+        "plantName": primary_name,
+        "logins": len(entries),
+        "uniqueUsers": len(unique_users),
+        "uniqueIps": len(unique_ips),
+        "latestLoginAt": latest,
+        "users": unique_users,
+        "ips": unique_ips,
+        "roles": roles,
+        "browsers": browsers,
+    }
 
 
 @settings_bp.get("/settings/me")
@@ -273,7 +378,7 @@ def list_access_rules():
 
 
 @settings_bp.put("/settings/access-rules")
-@require_auth(["Admin"])
+@require_auth(["Admin", "CEO"])
 @require_capability("canManageUsers")
 def update_access_rules():
     body = parse_json_body()
@@ -436,13 +541,22 @@ def update_governance_settings():
 
 
 @settings_bp.get("/settings/sessions")
-@require_auth(["Admin"])
+@require_auth(["Admin", "CEO"])
+@require_capability("canAccessSessions")
 def list_sessions():
     db = get_db()
+    sessions_by_id: dict[str, dict] = {}
+    users_by_id: dict[str, dict] = {}
     sessions = []
     outside_hours_sessions = []
     for session in db.active_sessions.find({}).sort("created_at", -1).limit(250):
-        user = db.users.find_one({"id": session.get("user_id")})
+        sessions_by_id[session.get("session_id")] = session
+        user_id = session.get("user_id")
+        user = users_by_id.get(user_id)
+        if user_id and user is None:
+            user = db.users.find_one({"id": user_id})
+            if user:
+                users_by_id[user_id] = user
         serialized = _serialize_session(session, user)
         sessions.append(serialized)
         if user and user.get("role") == "Mining Manager" and _outside_business_hours(session):
@@ -458,4 +572,37 @@ def list_sessions():
         ).sort("created_at", -1).limit(100)
     ]
 
-    return success_response({"items": sessions, "outsideBusinessHours": {"sessions": outside_hours_sessions, "blockedAttempts": blocked_off_hours}})
+    login_events = []
+    plant_login_groups: dict[str, list[dict]] = defaultdict(list)
+    for activity in db.activities.find({"action": "Login"}).sort("created_at", -1).limit(500):
+        user_id = activity.get("user_id")
+        user = users_by_id.get(user_id)
+        if user_id and user is None:
+            user = db.users.find_one({"id": user_id})
+            if user:
+                users_by_id[user_id] = user
+        session = sessions_by_id.get((activity.get("metadata") or {}).get("sessionId"))
+        serialized = _serialize_login_event(activity, user, session)
+        login_events.append(serialized)
+        plant_key = serialized.get("plantId") or "unassigned"
+        plant_login_groups[plant_key].append(serialized)
+
+    plant_summaries = [
+        _serialize_plant_login_summary(plant_id, entries)
+        for plant_id, entries in plant_login_groups.items()
+    ]
+    plant_summaries.sort(
+        key=lambda item: (
+            -int(item.get("logins", 0)),
+            -int(item.get("uniqueUsers", 0)),
+            str(item.get("plantName") or ""),
+        )
+    )
+
+    return success_response(
+        {
+            "items": sessions,
+            "outsideBusinessHours": {"sessions": outside_hours_sessions, "blockedAttempts": blocked_off_hours},
+            "loginTracking": {"items": login_events, "plantSummaries": plant_summaries},
+        }
+    )
