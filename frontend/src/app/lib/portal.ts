@@ -477,7 +477,7 @@ export function withManagerLocks(documents: EnrichedDocument[], state: PortalSta
   }));
 }
 
-export function summarizeByPlant(documents: EnrichedDocument[]) {
+export function summarizeByPlant(documents: EnrichedDocument[], projects?: Array<{ id: string; plantId: string }>) {
   const summary = new Map<string, { plant: string; documents: number; locked: number; projects: Set<string> }>();
 
   documents.forEach((document) => {
@@ -492,6 +492,14 @@ export function summarizeByPlant(documents: EnrichedDocument[]) {
     current.projects.add(document.projectId);
     summary.set(document.plantId, current);
   });
+
+  if (projects?.length) {
+    projects.forEach((project) => {
+      const current = summary.get(project.plantId);
+      if (!current) return;
+      current.projects.add(project.id);
+    });
+  }
 
   return Array.from(summary.entries()).map(([plantId, value]) => ({
     plantId,

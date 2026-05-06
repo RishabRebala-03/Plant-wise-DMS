@@ -1136,7 +1136,7 @@ function CeoDashboardPage() {
   const { documents, plants, projects, users, user } = usePortal();
   const navigate = useNavigate();
   const [heroDialog, setHeroDialog] = useState<null | "latest-upload" | "stalled-plants">(null);
-  const plantSummary = useMemo(() => summarizeByPlant(documents), [documents]);
+  const plantSummary = useMemo(() => summarizeByPlant(documents, projects), [documents, projects]);
   const topPlants = [...plantSummary].sort((a, b) => b.documents - a.documents).slice(0, 5);
   const lineSeries = topPlants.map((item, index) => ({
     plantId: item.plantId,
@@ -1273,7 +1273,7 @@ function CeoDashboardPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6">
         <div className="data-table-panel">
           <div className="data-table-toolbar">
             <h2 className="text-lg font-semibold text-slate-900">Plant Performance</h2>
