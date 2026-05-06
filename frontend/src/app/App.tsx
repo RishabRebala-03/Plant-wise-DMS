@@ -537,8 +537,11 @@ function PortalProvider({ user, children }: { user: User; children: ReactNode })
     [portalState.projects, user.name, user.role, visiblePlantIds],
   );
   const scopedRawDocuments = useMemo(
-    () => rawDocuments.filter((document) => visiblePlantIds.has(document.plantId)),
-    [rawDocuments, visiblePlantIds],
+    () => rawDocuments.filter((document) => (
+      visiblePlantIds.has(document.plantId)
+      || (user.role === "Mining Manager" && Boolean(document.grantedUserIds?.includes(user.id)))
+    )),
+    [rawDocuments, user.id, user.role, visiblePlantIds],
   );
   const documents = useMemo(() => {
     const enriched = enrichDocuments(scopedRawDocuments, scopedProjects, user, scopedPlants, portalState.projectAssignments);
@@ -990,9 +993,14 @@ function Shell({ onLogout, session }: { onLogout: () => void; session: SessionUi
               ) : null}
             </div>
 
-            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm">
+            <button
+              type="button"
+              onClick={() => navigate(user.role === "Admin" ? "/admin/settings?tab=profile" : "/settings?tab=profile")}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10"
+              title="Open profile"
+            >
               {user.name}
-            </div>
+            </button>
             <button
               onClick={onLogout}
               className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10"
@@ -1415,6 +1423,31 @@ function ManagerDashboardPage() {
   const myProjects = projects.filter((project) => allowedPlantIds.includes(project.plantId));
   const myDocuments = documents.filter((document) => allowedPlantIds.includes(document.plantId));
   const lockedDocuments = myDocuments.filter((document) => document.accessLocked);
+  const inReviewDocuments = myDocuments.filter((document) => document.status === "In Review");
+  const actionRequiredDocuments = myDocuments.filter((document) => document.status === "Action Required");
+  const approvedDocuments = myDocuments.filter((document) => document.status === "Approved");
+  const recentUploads = [...myDocuments].filter((document) => {
+    const uploadedAt = document.uploadedAt || document.date;
+    if (!uploadedAt) return false;
+    return new Date(uploadedAt).getTime() >= Date.now() - 1000 * 60 * 60 * 24 * 7;
+  });
+  const lastUploadDocument = [...myDocuments]
+    .filter((document) => Boolean(document.uploadedAt || document.date))
+    .sort((left, right) => (right.uploadedAt || right.date || "").localeCompare(left.uploadedAt || left.date || ""))[0];
+  const statusSeries = [
+    { name: "Approved", value: approvedDocuments.length, fill: "#0f766e" },
+    { name: "In Review", value: inReviewDocuments.length, fill: "#d97706" },
+    { name: "Action Required", value: actionRequiredDocuments.length, fill: "#dc2626" },
+    { name: "Locked", value: lockedDocuments.length, fill: "#475569" },
+  ].filter((entry) => entry.value > 0);
+  const projectHealthSeries = [
+    { name: "With docs", value: myProjects.filter((project) => project.documentIds.length > 0).length, fill: "#2563eb" },
+    { name: "No docs", value: myProjects.filter((project) => project.documentIds.length === 0).length, fill: "#cbd5e1" },
+  ];
+  const documentCoverage = myProjects.length
+    ? Math.round((myProjects.filter((project) => project.documentIds.length > 0).length / myProjects.length) * 100)
+    : 0;
+  const reviewCompletion = myDocuments.length ? Math.round((approvedDocuments.length / myDocuments.length) * 100) : 0;
   const managerGreetingName = user.firstName || user.name.split(" ")[0] || "there";
 
   return (
@@ -1453,6 +1486,175 @@ function ManagerDashboardPage() {
       </section>
 
       <div className="grid gap-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Uploads this week</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{recentUploads.length}</div>
+              </div>
+              <div className="rounded-2xl bg-sky-50 p-3 text-sky-700">
+                <Upload size={18} />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-600">Fresh document flow across your assigned plant scope.</div>
+          </div>
+          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Pending review</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{inReviewDocuments.length + actionRequiredDocuments.length}</div>
+              </div>
+              <div className="rounded-2xl bg-amber-50 p-3 text-amber-700">
+                <Clock3 size={18} />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-600">{inReviewDocuments.length} in review and {actionRequiredDocuments.length} needing action.</div>
+          </div>
+          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Project coverage</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{documentCoverage}%</div>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
+                <BarChart3 size={18} />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-600">Projects in your queue that already have document activity.</div>
+          </div>
+          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Review completion</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{reviewCompletion}%</div>
+              </div>
+              <div className="rounded-2xl bg-indigo-50 p-3 text-indigo-700">
+                <Eye size={18} />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-slate-600">Share of scoped documents already approved.</div>
+          </div>
+        </div>
+
+        <div className="rounded-[32px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Visual Analytics</h2>
+              <div className="mt-1 text-sm text-slate-500">A quick visual read on document status balance and project document readiness.</div>
+            </div>
+          </div>
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="text-sm font-semibold text-slate-900">Document status mix</div>
+              <div className="mt-1 text-sm text-slate-500">Approved versus active review pressure in your current scope.</div>
+              <div className="mt-4 h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={statusSeries.length ? statusSeries : [{ name: "No documents", value: 1, fill: "#cbd5e1" }]} dataKey="value" nameKey="name" innerRadius={62} outerRadius={98} paddingAngle={3}>
+                      {(statusSeries.length ? statusSeries : [{ name: "No documents", value: 1, fill: "#cbd5e1" }]).map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="text-sm font-semibold text-slate-900">Project documentation readiness</div>
+              <div className="mt-1 text-sm text-slate-500">How many projects already have a document trail attached.</div>
+              <div className="mt-4 h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={projectHealthSeries} margin={{ top: 8, right: 18, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(148, 163, 184, 0.12)" }} />
+                    <Bar dataKey="value" radius={[14, 14, 0, 0]}>
+                      {projectHealthSeries.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="data-table-panel">
+          <div className="data-table-toolbar">
+            <h2 className="text-lg font-semibold text-slate-900">Manager Analytics</h2>
+          </div>
+          <div className="data-table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th>Current view</th>
+                  <th>Why it matters</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="text-strong">Assigned plants</td>
+                  <td>{user.assignedPlants?.join(", ") || user.plant || "Assigned scope"}</td>
+                  <td>Confirms the plant coverage this dashboard is tracking.</td>
+                </tr>
+                <tr>
+                  <td className="text-strong">Latest upload</td>
+                  <td>{lastUploadDocument ? `${lastUploadDocument.name} • ${formatDateTime(lastUploadDocument.uploadedAt || lastUploadDocument.date)}` : "No uploads recorded yet"}</td>
+                  <td>Highlights the most recent field activity entering the system.</td>
+                </tr>
+                <tr>
+                  <td className="text-strong">Locked records</td>
+                  <td>{lockedDocuments.length} documents in controlled read-only mode</td>
+                  <td>Shows how much of your workspace has moved into restricted access.</td>
+                </tr>
+                <tr>
+                  <td className="text-strong">Open review workload</td>
+                  <td>{inReviewDocuments.length + actionRequiredDocuments.length} documents still moving through approval</td>
+                  <td>Helps prioritize follow-up with site teams and reviewers.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="data-table-panel">
+          <div className="data-table-toolbar">
+            <h2 className="text-lg font-semibold text-slate-900">Operational Focus</h2>
+          </div>
+          <div className="space-y-3 p-4">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Review queue</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {inReviewDocuments.length + actionRequiredDocuments.length > 0
+                  ? `${inReviewDocuments.length + actionRequiredDocuments.length} document${inReviewDocuments.length + actionRequiredDocuments.length === 1 ? "" : "s"} need attention before they can fully clear the workflow.`
+                  : "All visible documents are currently clear of active review blockers."}
+              </div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Project readiness</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {myProjects.filter((project) => project.documentIds.length === 0).length > 0
+                  ? `${myProjects.filter((project) => project.documentIds.length === 0).length} project${myProjects.filter((project) => project.documentIds.length === 0).length === 1 ? "" : "s"} still have no document trail yet.`
+                  : "Every project in your scope already has at least one supporting document."}
+              </div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Recommended next step</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {can("canUploadDocuments")
+                  ? "Keep the upload flow active for new inspections, permits, and maintenance records."
+                  : "Coordinate with an uploader who has document intake permission for your plant scope."}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="data-table-panel">
           <div className="data-table-toolbar">
             <h2 className="text-lg font-semibold text-slate-900">Projects</h2>
@@ -2293,12 +2495,13 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
   const [manager, setManager] = useState(searchParams.get("manager") || "");
   const [identifier, setIdentifier] = useState(searchParams.get("identifier") || "");
   const [category, setCategory] = useState(searchParams.get("category") || "");
-  const [plantId, setPlantId] = useState(scopedPlantId || (user.role === "Mining Manager" ? primaryPlantId(user) : searchParams.get("plantId") || ""));
+  const [plantId, setPlantId] = useState(scopedPlantId || (user.role === "Mining Manager" ? (searchParams.get("plantId") || "") : searchParams.get("plantId") || ""));
   const [projectId, setProjectId] = useState(scopedProjectId || searchParams.get("projectId") || "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [datePreset, setDatePreset] = useState("");
   const [documentSort, setDocumentSort] = useState("uploaded-desc");
+  const [managerDocumentTab, setManagerDocumentTab] = useState<"own" | "other">("own");
   const [serverDocuments, setServerDocuments] = useState<EnrichedDocument[]>(documents);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: documents.length });
@@ -2313,13 +2516,31 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
     setManager(searchParams.get("manager") || "");
     setIdentifier(searchParams.get("identifier") || "");
     setCategory(searchParams.get("category") || "");
-    if (!scopedPlantId && user.role !== "Mining Manager") {
+    if (!scopedPlantId) {
       setPlantId(searchParams.get("plantId") || "");
     }
     if (!scopedProjectId) {
       setProjectId(searchParams.get("projectId") || "");
     }
   }, [scopedPlantId, scopedProjectId, searchParams, user.role]);
+
+  useEffect(() => {
+    if (user.role !== "Mining Manager") return;
+    const requestedTab = searchParams.get("tab");
+    setManagerDocumentTab(requestedTab === "other" ? "other" : "own");
+  }, [searchParams, user.role]);
+
+  useEffect(() => {
+    if (user.role !== "Mining Manager" || scopedPlantId) return;
+    if (managerDocumentTab === "other") {
+      setPlantId("");
+      if (!scopedProjectId) setProjectId("");
+      return;
+    }
+    if (!plantId) {
+      setPlantId(primaryPlantId(user));
+    }
+  }, [managerDocumentTab, plantId, scopedPlantId, scopedProjectId, user]);
 
   const queryOptions = useMemo(() => {
     const registry = new Map<string, ValueHelpOption>();
@@ -2395,6 +2616,8 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
   }, [category, documents, effectiveDateFrom, effectiveDateTo, plantId, projectId, projects, scopedProjectId, plants, query, user]);
 
   const filtered = useMemo(() => serverDocuments.filter((document) => {
+    const matchesManagerTab = user.role !== "Mining Manager"
+      || (managerDocumentTab === "own" ? document.uploadedById === user.id : document.uploadedById !== user.id);
     const matchesPlant = !plantId || document.plantId === plantId;
     const matchesProject = !projectId || document.projectId === projectId;
     const matchesCategory = !category || document.category === category;
@@ -2403,8 +2626,8 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
     const matchesQuery = !query || [document.name, document.plant, document.projectName, document.category, document.uploadedBy].join(" ").toLowerCase().includes(query.toLowerCase());
     const matchesFrom = !effectiveDateFrom || Boolean(document.date && document.date >= effectiveDateFrom);
     const matchesTo = !effectiveDateTo || Boolean(document.date && document.date <= effectiveDateTo);
-    return matchesPlant && matchesProject && matchesCategory && matchesManager && matchesIdentifier && matchesQuery && matchesFrom && matchesTo;
-  }), [category, effectiveDateFrom, effectiveDateTo, identifier, manager, plantId, projectId, query, serverDocuments]);
+    return matchesManagerTab && matchesPlant && matchesProject && matchesCategory && matchesManager && matchesIdentifier && matchesQuery && matchesFrom && matchesTo;
+  }), [category, effectiveDateFrom, effectiveDateTo, identifier, manager, managerDocumentTab, plantId, projectId, query, serverDocuments, user.id, user.role]);
 
   const availableProjects = projects.filter((project) => !plantId || project.plantId === plantId);
   const categories = Array.from(new Set(documents.map((document) => document.category))).sort((a, b) => a.localeCompare(b));
@@ -2482,6 +2705,15 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
     ? `${projects.find((project) => project.id === scopedProjectId)?.name || "Project"} documents`
     : "Document listing";
 
+  const ownDocumentsCount = useMemo(
+    () => serverDocuments.filter((document) => document.uploadedById === user.id).length,
+    [serverDocuments, user.id],
+  );
+  const otherDocumentsCount = useMemo(
+    () => serverDocuments.filter((document) => document.uploadedById !== user.id).length,
+    [serverDocuments, user.id],
+  );
+
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[
@@ -2492,9 +2724,31 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
 
       <SectionCard
         title={title}
-        subtitle="Separate listing page with advanced search and structured filters"
+        subtitle={user.role === "Mining Manager"
+          ? "Managers see only their own uploaded documents by default. Explicit document-access grants can add named exceptions."
+          : "Separate listing page with advanced search and structured filters"}
         action={<ExportActions fileBaseName="documents" filteredRows={filteredDocumentExportRows} allRows={allDocumentExportRows} />}
       >
+        {user.role === "Mining Manager" && !scopedProjectId ? (
+          <div className="mb-5">
+            <Tabs
+              value={managerDocumentTab}
+              onValueChange={(nextValue) => {
+                const nextTab = nextValue === "other" ? "other" : "own";
+                setManagerDocumentTab(nextTab);
+                const nextParams = new URLSearchParams(location.search);
+                nextParams.set("tab", nextTab);
+                navigate(`${location.pathname}?${nextParams.toString()}`, { replace: true });
+              }}
+              className="space-y-0"
+            >
+              <TabsList className="grid w-full max-w-[460px] grid-cols-2">
+                <TabsTrigger value="own">Own documents ({ownDocumentsCount})</TabsTrigger>
+                <TabsTrigger value="other">Other documents ({otherDocumentsCount})</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <FilterField icon={Search} label="Search">
             <ValueHelp
@@ -2622,7 +2876,9 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
                 setDateFrom("");
                 setDateTo("");
                 setDocumentSort("uploaded-desc");
-                if (!scopedPlantId && user.role !== "Mining Manager") setPlantId("");
+                if (!scopedPlantId) {
+                  setPlantId(user.role === "Mining Manager" && managerDocumentTab === "own" ? primaryPlantId(user) : "");
+                }
                 if (!scopedProjectId) setProjectId("");
               }}
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
@@ -2634,7 +2890,11 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
 
         <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200">
           <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-            <span>{documentsLoading ? "Refreshing documents..." : `${pagination.total} document${pagination.total === 1 ? "" : "s"} in current scope`}</span>
+            <span>
+              {documentsLoading
+                ? "Refreshing documents..."
+                : `${sortedDocuments.length} document${sortedDocuments.length === 1 ? "" : "s"} in current ${user.role === "Mining Manager" && !scopedProjectId ? (managerDocumentTab === "own" ? "own-documents" : "granted-access") : "scope"}`}
+            </span>
           </div>
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
@@ -2797,7 +3057,9 @@ function DocumentDetailPage() {
 
   const canDownloadOriginal = Boolean(user.capabilities?.canDownloadDocuments)
     && (user.role === "CEO" || user.role === "Admin" || (user.role === "Mining Manager" && document.uploadedById === user.id));
-  const canViewOriginal = canDownloadOriginal;
+  const canViewOriginal = user.role === "CEO"
+    || user.role === "Admin"
+    || user.role === "Mining Manager";
   const previewSupported = canPreviewInBrowser(document.file?.name, document.file?.contentType);
 
   const mentionCandidates = users.filter((candidate) => candidate.id !== user.id);
@@ -2847,94 +3109,96 @@ function DocumentDetailPage() {
         </div>
       </section>
 
-      {user.role === "Mining Manager" ? (
-        <div className="rounded-3xl border border-[#BBD4F6] bg-[#EAF3FC] px-5 py-4 text-sm text-[#0A6ED1]">
-          Managers now have a read-only detail experience. Edit and delete options are removed, and this record is locked once accessed.
-        </div>
-      ) : null}
+      <Tabs defaultValue="details" className="space-y-6">
+        <TabsList className="grid w-full max-w-[520px] grid-cols-2">
+          <TabsTrigger value="details">Document details</TabsTrigger>
+          <TabsTrigger value="notes">Notes and access state</TabsTrigger>
+        </TabsList>
 
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <SectionCard title="Document details" subtitle="Core metadata and hierarchy context">
-          <div className="grid gap-4 md:grid-cols-2">
-            <DetailRow label="Document ID" value={document.id} />
-            <DetailRow label="Identifier" value={document.identifier} mono />
-            <DetailRow label="Plant" value={document.plant} />
-            <DetailRow label="Project" value={document.projectName} />
-            <DetailRow label="Category" value={document.category} />
-            <DetailRow label="Manager" value={document.managerName} />
-            <DetailRow label="Uploaded by" value={document.uploadedBy} />
-            <DetailRow label="Upload date" value={formatDate(document.date)} />
-            <DetailRow label="Upload time" value={formatDateTime(document.uploadedAt || document.date)} />
-            <DetailRow label="Version" value={`v${document.version}`} />
-            <DetailRow label="Status" value={document.status} />
-            <DetailRow label="Company" value={document.company || "Midwest Ltd"} />
-            <DetailRow label="File" value={document.file?.name || "Not attached"} />
-            <DetailRow label="Created at" value={formatDateTime(document.createdAt)} />
-            <DetailRow label="Last updated" value={formatDateTime(document.updatedAt)} />
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {document.file?.storageId && canViewOriginal ? (
-              <button onClick={() => void handleOpenPreview()} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                Open original file
-              </button>
-            ) : null}
-            {document.file?.storageId && canDownloadOriginal ? (
-              <button onClick={() => void documentsApi.saveDownloadedFile(document.id)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                Prepare download
-              </button>
-            ) : null}
-          </div>
-          {document.file?.storageId && !canDownloadOriginal ? (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Downloads are restricted. Managers can only download their own documents when CEO/Admin grant download access.
+        <TabsContent value="details" className="mt-0">
+          <SectionCard title="Document details" subtitle="Core metadata and hierarchy context">
+            <div className="grid gap-4 md:grid-cols-2">
+              <DetailRow label="Document ID" value={document.id} />
+              <DetailRow label="Identifier" value={document.identifier} mono />
+              <DetailRow label="Plant" value={document.plant} />
+              <DetailRow label="Project" value={document.projectName} />
+              <DetailRow label="Category" value={document.category} />
+              <DetailRow label="Manager" value={document.managerName} />
+              <DetailRow label="Uploaded by" value={document.uploadedBy} />
+              <DetailRow label="Upload date" value={formatDate(document.date)} />
+              <DetailRow label="Upload time" value={formatDateTime(document.uploadedAt || document.date)} />
+              <DetailRow label="Version" value={`v${document.version}`} />
+              <DetailRow label="Status" value={document.status} />
+              <DetailRow label="Company" value={document.company || "Midwest Ltd"} />
+              <DetailRow label="File" value={document.file?.name || "Not attached"} />
+              <DetailRow label="Created at" value={formatDateTime(document.createdAt)} />
+              <DetailRow label="Last updated" value={formatDateTime(document.updatedAt)} />
             </div>
-          ) : null}
-          {previewLoading ? (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Opening document preview...
+            <div className="mt-6 flex flex-wrap gap-3">
+              {document.file?.storageId && canViewOriginal ? (
+                <button onClick={() => void handleOpenPreview()} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  Open original file
+                </button>
+              ) : null}
+              {document.file?.storageId && canDownloadOriginal ? (
+                <button onClick={() => void documentsApi.saveDownloadedFile(document.id)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                  Prepare download
+                </button>
+              ) : null}
             </div>
-          ) : null}
-          {previewError ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {previewError}
-            </div>
-          ) : null}
-          {previewUrl && previewSupported ? (
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50">
-              <div className="border-b border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                In-app file preview
+            {document.file?.storageId && !canDownloadOriginal ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Downloads are restricted. You can still open the original file in-app, but `Prepare download` only appears when download access is granted.
               </div>
-              {previewContentType.startsWith("image/") ? (
-                <div className="bg-slate-100 p-4">
-                  <img src={previewUrl} alt={document.name} className="mx-auto max-h-[70vh] rounded-xl object-contain" />
+            ) : null}
+            {previewLoading ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Opening document preview...
+              </div>
+            ) : null}
+            {previewError ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {previewError}
+              </div>
+            ) : null}
+            {previewUrl && previewSupported ? (
+              <div className="mt-6 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50">
+                <div className="border-b border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                  In-app file preview
                 </div>
-              ) : (
-                <iframe
-                  src={previewSource(previewUrl, previewContentType)}
-                  title={`${document.name} preview`}
-                  className="h-[70vh] w-full bg-white"
-                />
-              )}
-            </div>
-          ) : null}
-          {previewUrl && !previewSupported ? (
-            <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-              This file type cannot be previewed in-app. Use `Prepare download` to access the original file.
-            </div>
-          ) : null}
-        </SectionCard>
+                {previewContentType.startsWith("image/") ? (
+                  <div className="bg-slate-100 p-4">
+                    <img src={previewUrl} alt={document.name} className="mx-auto max-h-[70vh] rounded-xl object-contain" />
+                  </div>
+                ) : (
+                  <iframe
+                    src={previewSource(previewUrl, previewContentType)}
+                    title={`${document.name} preview`}
+                    className="h-[70vh] w-full bg-white"
+                  />
+                )}
+              </div>
+            ) : null}
+            {previewUrl && !previewSupported ? (
+              <div className="mt-6 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                This file type cannot be previewed in-app. If download access is granted, use `Prepare download` to access the original file.
+              </div>
+            ) : null}
+          </SectionCard>
+        </TabsContent>
 
-        <SectionCard title="Notes and access state" subtitle="Comments plus reviewer signals">
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-sm font-medium text-slate-900">Manager lock state</div>
-            <div className="mt-2 text-sm text-slate-600">
-              {document.accessLocked
-                ? "This record has been opened in the current manager session and remains visually locked."
-                : "No lock has been applied yet."}
+        <TabsContent value="notes" className="mt-0">
+          <SectionCard title="Notes and access state" subtitle="Comments plus reviewer signals">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-medium text-slate-900">Manager lock state</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {document.accessLocked
+                  ? "This record has been opened in the current manager session and remains visually locked."
+                  : "No lock has been applied yet."}
+              </div>
             </div>
-          </div>
-          {user.role === "CEO" ? (
-            <div className="mt-4 rounded-[28px] border border-[#dbe7f3] bg-[#f8fbff] p-5">
+            {user.role === "CEO" ? (
+              <div className="mt-4 rounded-[28px] border border-[#dbe7f3] bg-[#f8fbff] p-5">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fb] text-[#0A6ED1]">
                   <MessageSquare size={18} />
@@ -2996,8 +3260,8 @@ function DocumentDetailPage() {
                   </span>
                 </button>
               </div>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
           {commentError ? (
             <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {commentError}
@@ -3141,8 +3405,9 @@ function DocumentDetailPage() {
               </div>
             </TabsContent>
           </Tabs>
-        </SectionCard>
-      </div>
+          </SectionCard>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -4163,6 +4428,9 @@ function AdminMasterDataPage() {
   const [userScopeFilter, setUserScopeFilter] = useState("");
   const [userEmailFilter, setUserEmailFilter] = useState("");
   const [userStatusFilter, setUserStatusFilter] = useState("");
+  const [userPlantFilter, setUserPlantFilter] = useState("");
+  const [userUpdatedFrom, setUserUpdatedFrom] = useState("");
+  const [userUpdatedTo, setUserUpdatedTo] = useState("");
   const [userDatePreset, setUserDatePreset] = useState("");
   const [userDateFrom, setUserDateFrom] = useState("");
   const [userDateTo, setUserDateTo] = useState("");
@@ -4257,27 +4525,40 @@ function AdminMasterDataPage() {
     ],
     [],
   );
+  const userPlantOptions = useMemo(
+    () =>
+      buildValueHelpOptions(
+        users.flatMap((candidate) => candidate.assignedPlants || (candidate.plant ? [candidate.plant] : [])),
+        "Assigned plant",
+      ),
+    [users],
+  );
   const userSortOptions = useMemo(
     () => [
       { value: "name-asc", label: "User A-Z", meta: "Sort" },
       { value: "role-asc", label: "Role A-Z", meta: "Sort" },
       { value: "status-asc", label: "Status A-Z", meta: "Sort" },
       { value: "created-desc", label: "Newest created first", meta: "Sort" },
+      { value: "updated-desc", label: "Latest updated first", meta: "Sort" },
     ],
     [],
   );
   const filteredUsers = useMemo(() => users.filter((candidate) => {
     const scopeCount = candidate.assignedPlantIds?.length || (candidate.plantId ? 1 : 0);
     const scope = scopeCount > 1 ? "multi" : scopeCount === 1 ? "single" : "enterprise";
+    const assignedPlants = candidate.assignedPlants || (candidate.plant ? [candidate.plant] : []);
     return matchesValueHelpFilter(userFilter, candidate.name)
       && matchesValueHelpFilter(userEmailFilter, candidate.email)
       && matchesValueHelpFilter(userRoleFilter, candidate.role)
       && matchesValueHelpFilter(userStatusFilter, candidate.status)
       && matchesValueHelpFilter(userScopeFilter, scope)
+      && matchesValueHelpFilter(userPlantFilter, ...assignedPlants)
       && matchesRelativeDatePreset(candidate.createdAt, userDatePreset)
       && (!userDateFrom || Boolean(candidate.createdAt && candidate.createdAt.slice(0, 10) >= userDateFrom))
-      && (!userDateTo || Boolean(candidate.createdAt && candidate.createdAt.slice(0, 10) <= userDateTo));
-  }), [userDateFrom, userDatePreset, userDateTo, userEmailFilter, userFilter, userRoleFilter, userScopeFilter, userStatusFilter, users]);
+      && (!userDateTo || Boolean(candidate.createdAt && candidate.createdAt.slice(0, 10) <= userDateTo))
+      && (!userUpdatedFrom || Boolean(candidate.updatedAt && candidate.updatedAt.slice(0, 10) >= userUpdatedFrom))
+      && (!userUpdatedTo || Boolean(candidate.updatedAt && candidate.updatedAt.slice(0, 10) <= userUpdatedTo));
+  }), [userDateFrom, userDatePreset, userDateTo, userEmailFilter, userFilter, userPlantFilter, userRoleFilter, userScopeFilter, userStatusFilter, userUpdatedFrom, userUpdatedTo, users]);
   const sortedUsers = useMemo(() => {
     const next = [...filteredUsers];
     next.sort((left, right) => {
@@ -4286,6 +4567,8 @@ function AdminMasterDataPage() {
           return compareText(left.role, right.role) || compareText(left.name, right.name);
         case "status-asc":
           return compareText(left.status, right.status) || compareText(left.name, right.name);
+        case "updated-desc":
+          return compareDateValue(right.updatedAt, left.updatedAt) || compareText(left.name, right.name);
         case "created-desc":
           return compareDateValue(right.createdAt, left.createdAt) || compareText(left.name, right.name);
         case "name-asc":
@@ -4704,6 +4987,7 @@ function AdminMasterDataPage() {
     resetMessages();
     try {
       const result = await documentsApi.get(document.id);
+      setSelectedDocument(result.document as EnrichedDocument);
       setDocumentComments(result.comments);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load document details.");
@@ -4784,34 +5068,34 @@ function AdminMasterDataPage() {
       {activeMasterTab === "creation" ? (
       <SectionCard title="Master data creation table" subtitle="Create and govern users, plants, projects, and policy controls from one detailed table">
         <div className="overflow-x-auto rounded-[24px] border border-slate-200">
-          <table className="min-w-[1220px] divide-y divide-slate-200">
+          <table className="min-w-[1220px] table-fixed border-separate border-spacing-0">
             <thead className="bg-slate-50">
               <tr className="text-left text-sm text-slate-500">
-                <th className="px-4 py-3 font-medium">Create</th>
-                <th className="px-4 py-3 font-medium">Column 1</th>
-                <th className="px-4 py-3 font-medium">Column 2</th>
-                <th className="px-4 py-3 font-medium">Column 3</th>
-                <th className="px-4 py-3 font-medium">Column 4</th>
-                <th className="px-4 py-3 font-medium">Column 5</th>
-                <th className="px-4 py-3 font-medium">Action</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Create</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Column 1</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Column 2</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Column 3</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Column 4</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Column 5</th>
+                <th className="border-b border-slate-200 px-4 py-3 font-medium">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white text-sm">
+            <tbody className="bg-white text-sm">
               <tr className="align-top bg-sky-50/60">
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-700">User</div>
                   <div className="mt-3 font-semibold text-slate-900">Account creation</div>
                   <div className="mt-1 text-xs text-slate-500">Provision Admin, CEO, or Mining Manager access.</div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Full name</div>
                   <input value={userDraft.name} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Full name" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Email</div>
                   <input value={userDraft.email} onChange={(event) => setUserDraft((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Role</div>
                   <select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value as UserRole, assignedPlantIds: event.target.value === "Mining Manager" ? current.assignedPlantIds : [] }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
                     <option value="Admin">Admin</option>
@@ -4819,7 +5103,7 @@ function AdminMasterDataPage() {
                     <option value="Mining Manager">Mining Manager</option>
                   </select>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Temporary password</div>
                   <div className="relative">
                     <input
@@ -4839,7 +5123,7 @@ function AdminMasterDataPage() {
                     </button>
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Assigned plants</div>
                   <div className="mb-2 text-xs text-slate-500">Optional for Admin and CEO. Active for Mining Managers.</div>
                   <div className="grid max-h-44 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -4861,7 +5145,7 @@ function AdminMasterDataPage() {
                     ))}
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-slate-200 px-4 py-5">
                   <div className="flex flex-col gap-3">
                     <button onClick={() => void createUserRecord()} disabled={userSubmitting} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
                       Create user
@@ -4874,28 +5158,28 @@ function AdminMasterDataPage() {
               </tr>
 
               <tr className="align-top bg-emerald-50/50">
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="inline-flex rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">Plant</div>
                   <div className="mt-3 font-semibold text-slate-900">Plant creation</div>
                   <div className="mt-1 text-xs text-slate-500">Add a new operational plant record.</div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Plant code</div>
                   <input value={plantDraft.plant} onChange={(event) => setPlantDraft((current) => ({ ...current, plant: event.target.value }))} placeholder="Plant" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Plant name</div>
                   <input value={plantDraft.plantName} onChange={(event) => setPlantDraft((current) => ({ ...current, plantName: event.target.value }))} placeholder="Plant Name" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Plant name 2</div>
                   <input value={plantDraft.plantName2} onChange={(event) => setPlantDraft((current) => ({ ...current, plantName2: event.target.value }))} placeholder="Plant Name 2" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4" colSpan={2}>
+                <td className="border-b border-r border-slate-200 px-4 py-5" colSpan={2}>
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Address</div>
                   <input value={plantDraft.address} onChange={(event) => setPlantDraft((current) => ({ ...current, address: event.target.value }))} placeholder="Address" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-slate-200 px-4 py-5">
                   <button onClick={() => void createPlantRecord()} disabled={plantSubmitting} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
                     Create plant
                   </button>
@@ -4903,12 +5187,12 @@ function AdminMasterDataPage() {
               </tr>
 
               <tr className="align-top bg-amber-50/55">
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700">Project</div>
                   <div className="mt-3 font-semibold text-slate-900">Project creation</div>
                   <div className="mt-1 text-xs text-slate-500">Register a new project under a selected plant.</div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Plant</div>
                   <select value={projectDraft.plantId} onChange={(event) => setProjectDraft((current) => ({ ...current, plantId: event.target.value }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
                     <option value="">Select plant</option>
@@ -4917,23 +5201,23 @@ function AdminMasterDataPage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Project name</div>
                   <input value={projectDraft.name} onChange={(event) => setProjectDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Project name" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Project code</div>
                   <input value={projectDraft.code} onChange={(event) => setProjectDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Project code" className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Due date</div>
                   <input type="date" value={projectDraft.dueDate} onChange={(event) => setProjectDraft((current) => ({ ...current, dueDate: event.target.value }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Description</div>
                   <textarea value={projectDraft.description} onChange={(event) => setProjectDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Project description" rows={4} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none transition focus:border-teal-500" />
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-slate-200 px-4 py-5">
                   <button onClick={() => void createProjectEntry()} disabled={projectSubmitting} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
                     Create project
                   </button>
@@ -4941,12 +5225,12 @@ function AdminMasterDataPage() {
               </tr>
 
               <tr className="align-top bg-violet-50/45">
-                <td className="px-4 py-4">
+                <td className="border-b border-r border-slate-200 px-4 py-5">
                   <div className="inline-flex rounded-full border border-violet-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-700">Policy</div>
                   <div className="mt-3 font-semibold text-slate-900">Document upload formats</div>
                   <div className="mt-1 text-xs text-slate-500">Control which file types mining managers are allowed to upload.</div>
                 </td>
-                <td className="px-4 py-4" colSpan={5}>
+                <td className="border-b border-r border-slate-200 px-4 py-5" colSpan={5}>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"].map((extension) => (
                       <label key={`format-${extension}`} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
@@ -4968,7 +5252,7 @@ function AdminMasterDataPage() {
                     Allowed now: {governancePolicy.allowedUploadFormats.map((value) => value.toUpperCase()).join(", ") || "None"}
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-b border-slate-200 px-4 py-5">
                   <button onClick={() => void saveGovernancePolicy()} disabled={policySubmitting} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
                     Save policy
                   </button>
@@ -4976,12 +5260,12 @@ function AdminMasterDataPage() {
               </tr>
 
               <tr className="align-top bg-rose-50/45">
-                <td className="px-4 py-4">
+                <td className="border-r border-slate-200 px-4 py-5">
                   <div className="inline-flex rounded-full border border-rose-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-700">Policy</div>
                   <div className="mt-3 font-semibold text-slate-900">Mining manager business hours</div>
                   <div className="mt-1 text-xs text-slate-500">Set the permitted sign-in window and working days for mining managers.</div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Timezone</div>
                   <select
                     value={governancePolicy.businessHours.timezone}
@@ -4993,7 +5277,7 @@ function AdminMasterDataPage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Start time</div>
                   <select
                     value={governancePolicy.businessHours.startHour}
@@ -5005,7 +5289,7 @@ function AdminMasterDataPage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-4">
+                <td className="border-r border-slate-200 px-4 py-5">
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">End time</div>
                   <select
                     value={governancePolicy.businessHours.endHour}
@@ -5017,7 +5301,7 @@ function AdminMasterDataPage() {
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-4" colSpan={2}>
+                <td className="border-r border-slate-200 px-4 py-5" colSpan={2}>
                   <div className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Working days</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {BUSINESS_DAY_OPTIONS.map((day) => (
@@ -5043,7 +5327,7 @@ function AdminMasterDataPage() {
                     Active window: {describeBusinessHours(governancePolicy)}
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-4 py-5">
                   <button onClick={() => void saveGovernancePolicy()} disabled={policySubmitting} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
                     Save hours
                   </button>
@@ -5067,6 +5351,7 @@ function AdminMasterDataPage() {
             <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={userRoleOptions} value={userRoleFilter} onChange={setUserRoleFilter} containerClassName="w-full" />
             <ValueHelp label="Status" placeholder="All statuses" emptyLabel="No matching statuses." options={userStatusOptions} value={userStatusFilter} onChange={setUserStatusFilter} containerClassName="w-full" />
             <ValueHelp label="Scope" placeholder="All scopes" emptyLabel="No matching scopes." options={userScopeOptions} value={userScopeFilter} onChange={setUserScopeFilter} containerClassName="w-full" />
+            <ValueHelp label="Assigned Plant" placeholder="All assigned plants" emptyLabel="No matching assigned plants." options={userPlantOptions} value={userPlantFilter} onChange={setUserPlantFilter} containerClassName="w-full" />
             <ValueHelp label="Created In" placeholder="Any time" emptyLabel="No matching date ranges." options={RELATIVE_DATE_PRESET_OPTIONS} value={userDatePreset} onChange={setUserDatePreset} containerClassName="w-full" clearLabel="Any time" clearDescription="Remove the created-date filter" />
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-700">From Date</span>
@@ -5076,9 +5361,17 @@ function AdminMasterDataPage() {
               <span className="font-medium text-slate-700">To Date</span>
               <input type="date" value={userDateTo} onChange={(event) => setUserDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
             </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Updated From</span>
+              <input type="date" value={userUpdatedFrom} onChange={(event) => setUserUpdatedFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Updated To</span>
+              <input type="date" value={userUpdatedTo} onChange={(event) => setUserUpdatedTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+            </label>
             <div className="flex items-end gap-3">
               <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={userSortOptions} value={userSort} onChange={setUserSort} containerClassName="w-full" clearLabel="User A-Z" clearDescription="Reset to the default sort order" />
-              <button type="button" onClick={() => { setUserFilter(""); setUserEmailFilter(""); setUserRoleFilter(""); setUserStatusFilter(""); setUserScopeFilter(""); setUserDatePreset(""); setUserDateFrom(""); setUserDateTo(""); setUserSort("name-asc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
+              <button type="button" onClick={() => { setUserFilter(""); setUserEmailFilter(""); setUserRoleFilter(""); setUserStatusFilter(""); setUserScopeFilter(""); setUserPlantFilter(""); setUserDatePreset(""); setUserDateFrom(""); setUserDateTo(""); setUserUpdatedFrom(""); setUserUpdatedTo(""); setUserSort("name-asc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
             </div>
           </div>
           <div className="overflow-hidden rounded-[24px] border border-slate-200">
@@ -5279,30 +5572,35 @@ function AdminMasterDataPage() {
           </div>
         </div>
         <div className="overflow-hidden rounded-[24px] border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200">
+          <table className="min-w-full table-fixed border-separate border-spacing-0">
             <thead className="bg-slate-50">
               <tr className="text-left text-sm text-slate-500">
-                <th className="px-4 py-3 font-medium">Document</th>
-                <th className="px-4 py-3 font-medium">Plant</th>
-                <th className="px-4 py-3 font-medium">Project</th>
-                <th className="px-4 py-3 font-medium">Uploaded by</th>
-                <th className="px-4 py-3 font-medium">Uploaded</th>
-                <th className="px-4 py-3 font-medium">Actions</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Document</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Plant</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Project</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Uploaded by</th>
+                <th className="border-b border-r border-slate-200 px-4 py-3 font-medium">Uploaded</th>
+                <th className="border-b border-slate-200 px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white text-sm">
-              {sortedDocuments.slice(0, 20).map((document) => (
+            <tbody className="bg-white text-sm">
+              {sortedDocuments.map((document) => (
                 <tr key={document.id}>
-                  <td className="px-4 py-4">
-                    <div className="font-medium text-slate-900">{document.name}</div>
+                  <td className="border-b border-r border-slate-200 px-4 py-4">
+                    <button onClick={() => void openDocumentEditor(document)} className="text-left font-medium text-slate-900 transition hover:text-sky-700 hover:underline">
+                      {document.name}
+                    </button>
                     <div className="mt-1 text-xs text-slate-500">{document.category}</div>
                   </td>
-                  <td className="px-4 py-4 text-slate-600">{document.plant}</td>
-                  <td className="px-4 py-4 text-slate-600">{document.projectName || "-"}</td>
-                  <td className="px-4 py-4 text-slate-600">{document.uploadedBy}</td>
-                  <td className="px-4 py-4 text-slate-600">{formatDateTime(document.uploadedAt || document.date)}</td>
-                  <td className="px-4 py-4">
+                  <td className="border-b border-r border-slate-200 px-4 py-4 text-slate-600">{document.plant}</td>
+                  <td className="border-b border-r border-slate-200 px-4 py-4 text-slate-600">{document.projectName || "-"}</td>
+                  <td className="border-b border-r border-slate-200 px-4 py-4 text-slate-600">{document.uploadedBy}</td>
+                  <td className="border-b border-r border-slate-200 px-4 py-4 text-slate-600">{formatDateTime(document.uploadedAt || document.date)}</td>
+                  <td className="border-b border-slate-200 px-4 py-4">
                     <div className="flex flex-wrap gap-2">
+                      <button onClick={() => void openDocumentEditor(document)} className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700 transition hover:bg-sky-100">
+                        View
+                      </button>
                       <button onClick={() => void openDocumentEditor(document)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50">
                         Edit
                       </button>
@@ -6246,8 +6544,9 @@ function ManagerDetailPage() {
 }
 
 function AdminAccessPage() {
-  const { portalState, setAccessRules, users, plants, refreshData } = usePortal();
+  const { portalState, setAccessRules, users, plants, documents, refreshData } = usePortal();
   const [savingManagerId, setSavingManagerId] = useState<string | null>(null);
+  const [savingDocumentAccessId, setSavingDocumentAccessId] = useState<string | null>(null);
   const [savingRules, setSavingRules] = useState(false);
   const [rulesMessage, setRulesMessage] = useState("");
   const [activeAccessTab, setActiveAccessTab] = useState("role-permissions");
@@ -6265,7 +6564,27 @@ function AdminAccessPage() {
   const [managerSort, setManagerSort] = useState("name-asc");
   const [managerPlantPicker, setManagerPlantPicker] = useState<Record<string, string>>({});
   const [managerAssignedOnly, setManagerAssignedOnly] = useState<Record<string, boolean>>({});
+  const [documentAccessQuery, setDocumentAccessQuery] = useState("");
+  const [documentAccessPlantFilter, setDocumentAccessPlantFilter] = useState("");
+  const [documentAccessProjectFilter, setDocumentAccessProjectFilter] = useState("");
+  const [documentAccessUploaderFilter, setDocumentAccessUploaderFilter] = useState("");
+  const [documentAccessCategoryFilter, setDocumentAccessCategoryFilter] = useState("");
+  const [documentAccessStatusFilter, setDocumentAccessStatusFilter] = useState("");
+  const [documentAccessGrantStateFilter, setDocumentAccessGrantStateFilter] = useState("");
+  const [documentAccessRecipientFilter, setDocumentAccessRecipientFilter] = useState("");
+  const [documentAccessSort, setDocumentAccessSort] = useState("uploaded-desc");
+  const [documentAccessDialogOpen, setDocumentAccessDialogOpen] = useState(false);
+  const [documentAccessTarget, setDocumentAccessTarget] = useState<DocumentRecord | null>(null);
+  const [documentAccessDraftIds, setDocumentAccessDraftIds] = useState<string[]>([]);
+  const [managerPickerNameFilter, setManagerPickerNameFilter] = useState("");
+  const [managerPickerEmailFilter, setManagerPickerEmailFilter] = useState("");
+  const [managerPickerPlantFilter, setManagerPickerPlantFilter] = useState("");
+  const [managerPickerStatusFilter, setManagerPickerStatusFilter] = useState("");
+  const [managerPickerScopeFilter, setManagerPickerScopeFilter] = useState("");
+  const [managerPickerGrantFilter, setManagerPickerGrantFilter] = useState("");
+  const [managerPickerSort, setManagerPickerSort] = useState("name-asc");
   const managerUsers = users.filter((candidate) => candidate.role === "Mining Manager");
+  const activeManagerUsers = managerUsers.filter((candidate) => candidate.status === "Active");
   const managersNeedingScope = managerUsers.filter((manager) => !(manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : [])).length);
   const capabilityLabelMap: Record<AccessCapability, string> = {
     canCreateProjects: "Create projects",
@@ -6501,6 +6820,173 @@ function AdminAccessPage() {
     }),
     [sortedManagers, plants],
   );
+  const documentAccessQueryOptions = useMemo(
+    () =>
+      documents.map((document) => ({
+        value: document.name,
+        label: document.name,
+        meta: [document.plant, document.projectName, document.uploadedBy].filter(Boolean).join(" • "),
+      })),
+    [documents],
+  );
+  const documentAccessRecipientOptions = useMemo(
+    () => buildValueHelpOptions(activeManagerUsers.map((manager) => manager.name), "Recipient"),
+    [activeManagerUsers],
+  );
+  const documentAccessPlantOptions = useMemo(() => buildValueHelpOptions(documents.map((document) => document.plant), "Plant"), [documents]);
+  const documentAccessProjectOptions = useMemo(() => buildValueHelpOptions(documents.map((document) => document.projectName), "Project"), [documents]);
+  const documentAccessUploaderOptions = useMemo(() => buildValueHelpOptions(documents.map((document) => document.uploadedBy), "Uploader"), [documents]);
+  const documentAccessCategoryOptions = useMemo(() => buildValueHelpOptions(documents.map((document) => document.category), "Category"), [documents]);
+  const documentAccessStatusOptions = useMemo(() => buildValueHelpOptions(documents.map((document) => document.status), "Status"), [documents]);
+  const documentAccessGrantStateOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "Granted", label: "Granted", meta: "Access state" },
+      { value: "Not granted", label: "Not granted", meta: "Access state" },
+    ],
+    [],
+  );
+  const documentAccessSortOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "uploaded-desc", label: "Latest uploaded first", meta: "Sort" },
+      { value: "name-asc", label: "Document A-Z", meta: "Sort" },
+      { value: "plant-asc", label: "Plant A-Z", meta: "Sort" },
+      { value: "project-asc", label: "Project A-Z", meta: "Sort" },
+      { value: "uploader-asc", label: "Uploader A-Z", meta: "Sort" },
+      { value: "category-asc", label: "Category A-Z", meta: "Sort" },
+      { value: "status-asc", label: "Status A-Z", meta: "Sort" },
+      { value: "grants-desc", label: "Most grants first", meta: "Sort" },
+    ],
+    [],
+  );
+  const managerPickerNameOptions = useMemo(() => buildValueHelpOptions(activeManagerUsers.map((manager) => manager.name), "Manager"), [activeManagerUsers]);
+  const managerPickerEmailOptions = useMemo(() => buildValueHelpOptions(activeManagerUsers.map((manager) => manager.email), "Email"), [activeManagerUsers]);
+  const managerPickerPlantOptions = useMemo(
+    () => buildValueHelpOptions(activeManagerUsers.flatMap((manager) => manager.assignedPlants?.length ? manager.assignedPlants : [manager.plant]), "Assigned plant"),
+    [activeManagerUsers],
+  );
+  const managerPickerStatusOptions = useMemo(() => buildValueHelpOptions(activeManagerUsers.map((manager) => manager.status), "Status"), [activeManagerUsers]);
+  const managerPickerScopeOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "0", label: "0 plants", meta: "Scope count" },
+      { value: "1", label: "1 plant", meta: "Scope count" },
+      { value: "2+", label: "2+ plants", meta: "Scope count" },
+    ],
+    [],
+  );
+  const managerPickerGrantOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "Granted", label: "Granted", meta: "Access state" },
+      { value: "Not granted", label: "Not granted", meta: "Access state" },
+    ],
+    [],
+  );
+  const managerPickerSortOptions = useMemo<ValueHelpOption[]>(
+    () => [
+      { value: "name-asc", label: "Manager A-Z", meta: "Sort" },
+      { value: "name-desc", label: "Manager Z-A", meta: "Sort" },
+      { value: "plant-asc", label: "Plant A-Z", meta: "Sort" },
+      { value: "scope-desc", label: "Most plants assigned", meta: "Sort" },
+      { value: "granted-first", label: "Granted first", meta: "Sort" },
+      { value: "status-asc", label: "Status A-Z", meta: "Sort" },
+    ],
+    [],
+  );
+  const filteredDocumentAccessRows = useMemo(() => {
+    const query = normalizeSearchValue(documentAccessQuery);
+    return [...documents]
+      .filter((document) => {
+        const grantedManagers = activeManagerUsers.filter((manager) => document.grantedUserIds?.includes(manager.id));
+        const grantState = grantedManagers.length ? "Granted" : "Not granted";
+        const matchesQuery = !query || [document.name, document.plant, document.projectName, document.category, document.uploadedBy]
+          .some((value) => normalizeSearchValue(value).includes(query));
+        const matchesPlant = matchesValueHelpFilter(documentAccessPlantFilter, document.plant);
+        const matchesProject = matchesValueHelpFilter(documentAccessProjectFilter, document.projectName || undefined);
+        const matchesUploader = matchesValueHelpFilter(documentAccessUploaderFilter, document.uploadedBy);
+        const matchesCategory = matchesValueHelpFilter(documentAccessCategoryFilter, document.category);
+        const matchesStatus = matchesValueHelpFilter(documentAccessStatusFilter, document.status);
+        const matchesGrantState = matchesValueHelpFilter(documentAccessGrantStateFilter, grantState);
+        const matchesRecipient = !documentAccessRecipientFilter || grantedManagers.some((manager) => manager.name === documentAccessRecipientFilter);
+        return matchesQuery && matchesPlant && matchesProject && matchesUploader && matchesCategory && matchesStatus && matchesGrantState && matchesRecipient;
+      })
+      .sort((left, right) => {
+        switch (documentAccessSort) {
+          case "name-asc":
+            return compareText(left.name, right.name);
+          case "plant-asc":
+            return compareText(left.plant, right.plant) || compareText(left.name, right.name);
+          case "project-asc":
+            return compareText(left.projectName, right.projectName) || compareText(left.name, right.name);
+          case "uploader-asc":
+            return compareText(left.uploadedBy, right.uploadedBy) || compareText(left.name, right.name);
+          case "category-asc":
+            return compareText(left.category, right.category) || compareText(left.name, right.name);
+          case "status-asc":
+            return compareText(left.status, right.status) || compareText(left.name, right.name);
+          case "grants-desc":
+            return compareNumber((right.grantedUserIds || []).length, (left.grantedUserIds || []).length) || compareText(left.name, right.name);
+          case "uploaded-desc":
+          default:
+            return compareDateValue(right.uploadedAt || right.date, left.uploadedAt || left.date) || compareText(left.name, right.name);
+        }
+      });
+  }, [
+    activeManagerUsers,
+    documentAccessCategoryFilter,
+    documentAccessGrantStateFilter,
+    documentAccessPlantFilter,
+    documentAccessProjectFilter,
+    documentAccessQuery,
+    documentAccessRecipientFilter,
+    documentAccessSort,
+    documentAccessStatusFilter,
+    documentAccessUploaderFilter,
+    documents,
+  ]);
+  const filteredManagerPickerRows = useMemo(() => {
+    return [...activeManagerUsers]
+      .filter((manager) => {
+        const assignedNames = manager.assignedPlants?.length ? manager.assignedPlants : manager.plant ? [manager.plant] : [];
+        const scopeBucket = assignedNames.length === 0 ? "0" : assignedNames.length === 1 ? "1" : "2+";
+        const grantState = documentAccessDraftIds.includes(manager.id) ? "Granted" : "Not granted";
+        return matchesValueHelpFilter(managerPickerNameFilter, manager.name)
+          && matchesValueHelpFilter(managerPickerEmailFilter, manager.email)
+          && matchesValueHelpFilter(managerPickerPlantFilter, ...assignedNames)
+          && matchesValueHelpFilter(managerPickerStatusFilter, manager.status)
+          && matchesValueHelpFilter(managerPickerScopeFilter, scopeBucket)
+          && matchesValueHelpFilter(managerPickerGrantFilter, grantState);
+      })
+      .sort((left, right) => {
+        const leftPlants = left.assignedPlants?.length ? left.assignedPlants : left.plant ? [left.plant] : [];
+        const rightPlants = right.assignedPlants?.length ? right.assignedPlants : right.plant ? [right.plant] : [];
+        const leftGranted = documentAccessDraftIds.includes(left.id) ? 1 : 0;
+        const rightGranted = documentAccessDraftIds.includes(right.id) ? 1 : 0;
+        switch (managerPickerSort) {
+          case "name-desc":
+            return compareText(right.name, left.name);
+          case "plant-asc":
+            return compareText(leftPlants.join(", "), rightPlants.join(", ")) || compareText(left.name, right.name);
+          case "scope-desc":
+            return compareNumber(rightPlants.length, leftPlants.length) || compareText(left.name, right.name);
+          case "granted-first":
+            return compareNumber(rightGranted, leftGranted) || compareText(left.name, right.name);
+          case "status-asc":
+            return compareText(left.status, right.status) || compareText(left.name, right.name);
+          case "name-asc":
+          default:
+            return compareText(left.name, right.name);
+        }
+      });
+  }, [
+    activeManagerUsers,
+    documentAccessDraftIds,
+    managerPickerEmailFilter,
+    managerPickerGrantFilter,
+    managerPickerNameFilter,
+    managerPickerPlantFilter,
+    managerPickerScopeFilter,
+    managerPickerSort,
+    managerPickerStatusFilter,
+  ]);
 
   async function updateRule(index: number, field: keyof AccessRule, value: string | boolean) {
     const next = normalizedAccessRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule);
@@ -6540,6 +7026,40 @@ function AdminAccessPage() {
       await refreshData();
     } finally {
       setSavingManagerId(null);
+    }
+  }
+
+  function openDocumentAccessDialog(document: DocumentRecord) {
+    setDocumentAccessTarget(document);
+    setDocumentAccessDraftIds(document.grantedUserIds || []);
+    setManagerPickerNameFilter("");
+    setManagerPickerEmailFilter("");
+    setManagerPickerPlantFilter("");
+    setManagerPickerStatusFilter("");
+    setManagerPickerScopeFilter("");
+    setManagerPickerGrantFilter("");
+    setManagerPickerSort("name-asc");
+    setDocumentAccessDialogOpen(true);
+  }
+
+  function toggleDocumentAccessDraft(managerId: string, checked: boolean) {
+    setDocumentAccessDraftIds((current) => checked ? Array.from(new Set([...current, managerId])) : current.filter((id) => id !== managerId));
+  }
+
+  async function saveDocumentAccess() {
+    if (!documentAccessTarget) return;
+    setSavingDocumentAccessId(documentAccessTarget.id);
+    setRulesMessage("");
+    try {
+      await documentsApi.update(documentAccessTarget.id, { grantedUserIds: documentAccessDraftIds });
+      await refreshData();
+      setRulesMessage("Document access updated.");
+      setDocumentAccessDialogOpen(false);
+      setDocumentAccessTarget(null);
+    } catch (error) {
+      setRulesMessage(error instanceof Error ? error.message : "Unable to update document access.");
+    } finally {
+      setSavingDocumentAccessId(null);
     }
   }
 
@@ -6584,9 +7104,10 @@ function AdminAccessPage() {
       ) : null}
 
       <Tabs value={activeAccessTab} onValueChange={setActiveAccessTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-[620px] grid-cols-2">
+        <TabsList className="grid w-full max-w-[860px] grid-cols-3">
           <TabsTrigger value="role-permissions">Role permissions</TabsTrigger>
           <TabsTrigger value="manager-assignment">Manager plant assignment</TabsTrigger>
+          <TabsTrigger value="document-access">Document access</TabsTrigger>
         </TabsList>
 
       <TabsContent value="role-permissions" className="mt-0">
@@ -6789,7 +7310,211 @@ function AdminAccessPage() {
         </div>
       </SectionCard>
       </TabsContent>
+
+      <TabsContent value="document-access" className="mt-0">
+      <SectionCard
+        title="Document access"
+        subtitle="Managers only see their own uploaded documents by default. Add explicit exceptions here when a specific document should be visible outside normal scope."
+      >
+        <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <ValueHelp label="Document" placeholder="Search documents" emptyLabel="No matching documents." options={documentAccessQueryOptions} value={documentAccessQuery} onChange={setDocumentAccessQuery} containerClassName="w-full" />
+          <ValueHelp label="Plant" placeholder="All plants" emptyLabel="No matching plants." options={documentAccessPlantOptions} value={documentAccessPlantFilter} onChange={setDocumentAccessPlantFilter} containerClassName="w-full" />
+          <ValueHelp label="Project" placeholder="All projects" emptyLabel="No matching projects." options={documentAccessProjectOptions} value={documentAccessProjectFilter} onChange={setDocumentAccessProjectFilter} containerClassName="w-full" />
+          <ValueHelp label="Uploader" placeholder="All uploaders" emptyLabel="No matching uploaders." options={documentAccessUploaderOptions} value={documentAccessUploaderFilter} onChange={setDocumentAccessUploaderFilter} containerClassName="w-full" />
+          <ValueHelp label="Category" placeholder="All categories" emptyLabel="No matching categories." options={documentAccessCategoryOptions} value={documentAccessCategoryFilter} onChange={setDocumentAccessCategoryFilter} containerClassName="w-full" />
+          <ValueHelp label="Status" placeholder="All statuses" emptyLabel="No matching statuses." options={documentAccessStatusOptions} value={documentAccessStatusFilter} onChange={setDocumentAccessStatusFilter} containerClassName="w-full" />
+          <ValueHelp label="Access state" placeholder="Any grant state" emptyLabel="No matching access states." options={documentAccessGrantStateOptions} value={documentAccessGrantStateFilter} onChange={setDocumentAccessGrantStateFilter} containerClassName="w-full" />
+          <ValueHelp label="Granted manager" placeholder="Any granted manager" emptyLabel="No matching managers." options={documentAccessRecipientOptions} value={documentAccessRecipientFilter} onChange={setDocumentAccessRecipientFilter} containerClassName="w-full" />
+          <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={documentAccessSortOptions} value={documentAccessSort} onChange={setDocumentAccessSort} containerClassName="w-full" clearLabel="Latest uploaded first" clearDescription="Reset to the default sort order" />
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentAccessQuery("");
+                setDocumentAccessPlantFilter("");
+                setDocumentAccessProjectFilter("");
+                setDocumentAccessUploaderFilter("");
+                setDocumentAccessCategoryFilter("");
+                setDocumentAccessStatusFilter("");
+                setDocumentAccessGrantStateFilter("");
+                setDocumentAccessRecipientFilter("");
+                setDocumentAccessSort("uploaded-desc");
+              }}
+              className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-[28px] border border-slate-200">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <span>{filteredDocumentAccessRows.length} document{filteredDocumentAccessRows.length === 1 ? "" : "s"} in current access view</span>
+          </div>
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-sm text-slate-500">
+                <th className="px-4 py-3 font-medium">Document</th>
+                <th className="px-4 py-3 font-medium">Plant</th>
+                <th className="px-4 py-3 font-medium">Project</th>
+                <th className="px-4 py-3 font-medium">Uploader</th>
+                <th className="px-4 py-3 font-medium">Category</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Explicit Access</th>
+                <th className="px-4 py-3 font-medium">Grant Manager Access</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white text-sm">
+              {filteredDocumentAccessRows.map((document) => {
+                const grantedManagers = activeManagerUsers.filter((manager) => document.grantedUserIds?.includes(manager.id));
+                return (
+                  <tr key={document.id} className="align-top transition hover:bg-slate-50">
+                    <td className="px-4 py-4">
+                      <div className="font-semibold text-slate-900">{document.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">{document.id}</div>
+                    </td>
+                    <td className="px-4 py-4 text-slate-600">{document.plant}</td>
+                    <td className="px-4 py-4 text-slate-600">{document.projectName || "-"}</td>
+                    <td className="px-4 py-4 text-slate-600">{document.uploadedBy}</td>
+                    <td className="px-4 py-4 text-slate-600">{document.category}</td>
+                    <td className="px-4 py-4 text-slate-600">{document.status}</td>
+                    <td className="px-4 py-4 text-slate-600">
+                      {grantedManagers.length ? grantedManagers.map((manager) => manager.name).join(", ") : "None"}
+                    </td>
+                    <td className="px-4 py-4">
+                      <button
+                        type="button"
+                        onClick={() => openDocumentAccessDialog(document)}
+                        disabled={savingDocumentAccessId === document.id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        {savingDocumentAccessId === document.id ? "Saving..." : "Select managers"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filteredDocumentAccessRows.length ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">No documents matched the current document-access filters.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+      </TabsContent>
       </Tabs>
+
+      <Dialog open={documentAccessDialogOpen} onOpenChange={setDocumentAccessDialogOpen}>
+        <DialogContent className="rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)] sm:max-w-[1080px]">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <DialogHeader className="text-left">
+              <DialogTitle className="text-xl font-semibold text-slate-900">Grant Manager Access</DialogTitle>
+              <DialogDescription className="mt-2 text-sm leading-6 text-slate-500">
+                {documentAccessTarget
+                  ? `${documentAccessTarget.name} • ${documentAccessTarget.plant} • Uploaded by ${documentAccessTarget.uploadedBy}`
+                  : "Select managers who should receive explicit access to this document outside default scope."}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="max-h-[70vh] overflow-auto px-6 py-5">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <ValueHelp label="Manager" placeholder="All managers" emptyLabel="No matching managers." options={managerPickerNameOptions} value={managerPickerNameFilter} onChange={setManagerPickerNameFilter} containerClassName="w-full" />
+              <ValueHelp label="Email" placeholder="All emails" emptyLabel="No matching emails." options={managerPickerEmailOptions} value={managerPickerEmailFilter} onChange={setManagerPickerEmailFilter} containerClassName="w-full" />
+              <ValueHelp label="Assigned Plant" placeholder="All plants" emptyLabel="No matching plants." options={managerPickerPlantOptions} value={managerPickerPlantFilter} onChange={setManagerPickerPlantFilter} containerClassName="w-full" />
+              <ValueHelp label="Status" placeholder="All statuses" emptyLabel="No matching statuses." options={managerPickerStatusOptions} value={managerPickerStatusFilter} onChange={setManagerPickerStatusFilter} containerClassName="w-full" />
+              <ValueHelp label="Scope Count" placeholder="Any scope count" emptyLabel="No matching scope counts." options={managerPickerScopeOptions} value={managerPickerScopeFilter} onChange={setManagerPickerScopeFilter} containerClassName="w-full" />
+              <ValueHelp label="Grant State" placeholder="Any grant state" emptyLabel="No matching grant states." options={managerPickerGrantOptions} value={managerPickerGrantFilter} onChange={setManagerPickerGrantFilter} containerClassName="w-full" />
+              <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={managerPickerSortOptions} value={managerPickerSort} onChange={setManagerPickerSort} containerClassName="w-full" clearLabel="Manager A-Z" clearDescription="Reset to the default sort order" />
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManagerPickerNameFilter("");
+                    setManagerPickerEmailFilter("");
+                    setManagerPickerPlantFilter("");
+                    setManagerPickerStatusFilter("");
+                    setManagerPickerScopeFilter("");
+                    setManagerPickerGrantFilter("");
+                    setManagerPickerSort("name-asc");
+                  }}
+                  className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 overflow-hidden rounded-[24px] border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-sm text-slate-500">
+                    <th className="px-4 py-3 font-medium">Manager</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Assigned Plants</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Scope Count</th>
+                    <th className="px-4 py-3 font-medium">Grant</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white text-sm">
+                  {filteredManagerPickerRows.map((manager) => {
+                    const isUploader = manager.id === documentAccessTarget?.uploadedById;
+                    const checked = documentAccessDraftIds.includes(manager.id);
+                    const assignedPlants = manager.assignedPlants?.length ? manager.assignedPlants : manager.plant ? [manager.plant] : [];
+                    return (
+                      <tr key={manager.id} className="transition hover:bg-slate-50">
+                        <td className="px-4 py-4">
+                          <div className="font-medium text-slate-900">{manager.name}</div>
+                          {isUploader ? <div className="mt-1 text-xs text-slate-500">Uploader keeps default access automatically</div> : null}
+                        </td>
+                        <td className="px-4 py-4 text-slate-600">{manager.email}</td>
+                        <td className="px-4 py-4 text-slate-600">{assignedPlants.join(", ") || "None"}</td>
+                        <td className="px-4 py-4 text-slate-600">{manager.status}</td>
+                        <td className="px-4 py-4 text-slate-600">{assignedPlants.length}</td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isUploader}
+                            onChange={(event) => toggleDocumentAccessDraft(manager.id, event.target.checked)}
+                            className="h-4 w-4 accent-teal-600"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!filteredManagerPickerRows.length ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-slate-500">No managers matched the current selection filters.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <DialogFooter className="border-t border-slate-200 px-6 py-4">
+            <button
+              type="button"
+              onClick={() => {
+                setDocumentAccessDialogOpen(false);
+                setDocumentAccessTarget(null);
+              }}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveDocumentAccess()}
+              disabled={!documentAccessTarget || savingDocumentAccessId === documentAccessTarget?.id}
+              className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {savingDocumentAccessId === documentAccessTarget?.id ? "Saving..." : "Save document access"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -7634,11 +8359,13 @@ function AdminSessionsPage() {
   const [sessionDateFrom, setSessionDateFrom] = useState("");
   const [sessionDateTo, setSessionDateTo] = useState("");
   const [outsideUserFilter, setOutsideUserFilter] = useState("");
+  const [outsideRoleFilter, setOutsideRoleFilter] = useState("");
   const [outsideIpFilter, setOutsideIpFilter] = useState("");
   const [outsideDatePreset, setOutsideDatePreset] = useState("");
   const [outsideDateFrom, setOutsideDateFrom] = useState("");
   const [outsideDateTo, setOutsideDateTo] = useState("");
   const [blockedUserFilter, setBlockedUserFilter] = useState("");
+  const [blockedRoleFilter, setBlockedRoleFilter] = useState("");
   const [blockedIpFilter, setBlockedIpFilter] = useState("");
   const [blockedDatePreset, setBlockedDatePreset] = useState("");
   const [blockedDateFrom, setBlockedDateFrom] = useState("");
@@ -7716,6 +8443,7 @@ function AdminSessionsPage() {
     return next;
   }, [filteredSessions, sessionSort]);
   const outsideUserOptions = useMemo(() => buildValueHelpOptions(outsideHoursSessions.map((session) => session.userName), "User"), [outsideHoursSessions]);
+  const outsideRoleOptions = useMemo(() => buildValueHelpOptions(outsideHoursSessions.map((session) => session.userRole), "Role"), [outsideHoursSessions]);
   const outsideIpOptions = useMemo(() => buildValueHelpOptions(outsideHoursSessions.map((session) => session.clientIp), "IP"), [outsideHoursSessions]);
   const outsideSessionSortOptions = useMemo(
     () => [
@@ -7729,12 +8457,13 @@ function AdminSessionsPage() {
     () =>
       outsideHoursSessions.filter((session) => (
         matchesValueHelpFilter(outsideUserFilter, session.userName || undefined) &&
+        matchesValueHelpFilter(outsideRoleFilter, session.userRole || undefined) &&
         matchesValueHelpFilter(outsideIpFilter, session.clientIp) &&
         matchesRelativeDatePreset(session.startedAt, outsideDatePreset) &&
         (!outsideDateFrom || Boolean(session.startedAt && session.startedAt.slice(0, 10) >= outsideDateFrom)) &&
         (!outsideDateTo || Boolean(session.startedAt && session.startedAt.slice(0, 10) <= outsideDateTo))
       )),
-    [outsideDateFrom, outsideDatePreset, outsideDateTo, outsideHoursSessions, outsideIpFilter, outsideUserFilter],
+    [outsideDateFrom, outsideDatePreset, outsideDateTo, outsideHoursSessions, outsideIpFilter, outsideRoleFilter, outsideUserFilter],
   );
   const sortedOutsideSessions = useMemo(() => {
     const next = [...filteredOutsideSessions];
@@ -7752,6 +8481,7 @@ function AdminSessionsPage() {
     return next;
   }, [filteredOutsideSessions, outsideSessionSort]);
   const blockedUserOptions = useMemo(() => buildValueHelpOptions(outsideHoursAttempts.map((attempt) => attempt.userName), "User"), [outsideHoursAttempts]);
+  const blockedRoleOptions = useMemo(() => buildValueHelpOptions(outsideHoursAttempts.map((attempt) => attempt.userRole), "Role"), [outsideHoursAttempts]);
   const blockedIpOptions = useMemo(() => buildValueHelpOptions(outsideHoursAttempts.map((attempt) => attempt.clientIp), "IP"), [outsideHoursAttempts]);
   const blockedAttemptSortOptions = useMemo(
     () => [
@@ -7765,12 +8495,13 @@ function AdminSessionsPage() {
     () =>
       outsideHoursAttempts.filter((attempt) => (
         matchesValueHelpFilter(blockedUserFilter, attempt.userName || undefined) &&
+        matchesValueHelpFilter(blockedRoleFilter, attempt.userRole || undefined) &&
         matchesValueHelpFilter(blockedIpFilter, attempt.clientIp) &&
         matchesRelativeDatePreset(attempt.occurredAt, blockedDatePreset) &&
         (!blockedDateFrom || Boolean(attempt.occurredAt && attempt.occurredAt.slice(0, 10) >= blockedDateFrom)) &&
         (!blockedDateTo || Boolean(attempt.occurredAt && attempt.occurredAt.slice(0, 10) <= blockedDateTo))
       )),
-    [blockedDateFrom, blockedDatePreset, blockedDateTo, blockedIpFilter, blockedUserFilter, outsideHoursAttempts],
+    [blockedDateFrom, blockedDatePreset, blockedDateTo, blockedIpFilter, blockedRoleFilter, blockedUserFilter, outsideHoursAttempts],
   );
   const sortedBlockedAttempts = useMemo(() => {
     const next = [...filteredBlockedAttempts];
@@ -7875,16 +8606,23 @@ function AdminSessionsPage() {
                 <div className="mt-6 grid gap-6">
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3"><div className="text-base font-semibold text-slate-900">Flagged off-hours sessions</div><ExportActions fileBaseName="outside-hours-sessions" filteredRows={filteredOutsideSessionExportRows} allRows={allOutsideSessionExportRows} /></div>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                       <ValueHelp label="User" placeholder="All users" emptyLabel="No matching users." options={outsideUserOptions} value={outsideUserFilter} onChange={setOutsideUserFilter} containerClassName="w-full" />
-                      <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={outsideSessionSortOptions} value={outsideSessionSort} onChange={setOutsideSessionSort} containerClassName="w-full" clearLabel="Latest started first" clearDescription="Reset to the default sort order" />
-                      <div className="flex items-end gap-3">
-                        <ValueHelp label="IP" placeholder="All IPs" emptyLabel="No matching IPs." options={outsideIpOptions} value={outsideIpFilter} onChange={setOutsideIpFilter} containerClassName="w-full" />
-                        <button type="button" onClick={() => { setOutsideUserFilter(""); setOutsideIpFilter(""); setOutsideDatePreset(""); setOutsideDateFrom(""); setOutsideDateTo(""); setOutsideSessionSort("started-desc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
-                      </div>
+                      <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={outsideRoleOptions} value={outsideRoleFilter} onChange={setOutsideRoleFilter} containerClassName="w-full" />
+                      <ValueHelp label="IP" placeholder="All IPs" emptyLabel="No matching IPs." options={outsideIpOptions} value={outsideIpFilter} onChange={setOutsideIpFilter} containerClassName="w-full" />
                       <ValueHelp label="Started In" placeholder="Any time" emptyLabel="No matching date ranges." options={RELATIVE_DATE_PRESET_OPTIONS} value={outsideDatePreset} onChange={setOutsideDatePreset} containerClassName="w-full" clearLabel="Any time" clearDescription="Remove the started-date filter" />
-                      <input type="date" value={outsideDateFrom} onChange={(event) => setOutsideDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Off-hours session from date" />
-                      <input type="date" value={outsideDateTo} onChange={(event) => setOutsideDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Off-hours session to date" />
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-slate-700">From Date</span>
+                        <input type="date" value={outsideDateFrom} onChange={(event) => setOutsideDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Off-hours session from date" />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-slate-700">To Date</span>
+                        <input type="date" value={outsideDateTo} onChange={(event) => setOutsideDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Off-hours session to date" />
+                      </label>
+                      <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={outsideSessionSortOptions} value={outsideSessionSort} onChange={setOutsideSessionSort} containerClassName="w-full" clearLabel="Latest started first" clearDescription="Reset to the default sort order" />
+                      <div className="flex items-end">
+                        <button type="button" onClick={() => { setOutsideUserFilter(""); setOutsideRoleFilter(""); setOutsideIpFilter(""); setOutsideDatePreset(""); setOutsideDateFrom(""); setOutsideDateTo(""); setOutsideSessionSort("started-desc"); }} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
+                      </div>
                     </div>
                     <div className="overflow-hidden rounded-[28px] border border-amber-200">
                       <table className="min-w-full divide-y divide-amber-100">
@@ -7921,16 +8659,23 @@ function AdminSessionsPage() {
 
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3"><div className="text-base font-semibold text-slate-900">Blocked outside-hours login attempts</div><ExportActions fileBaseName="outside-hours-blocked-attempts" filteredRows={filteredBlockedAttemptExportRows} allRows={allBlockedAttemptExportRows} /></div>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                       <ValueHelp label="User" placeholder="All users" emptyLabel="No matching users." options={blockedUserOptions} value={blockedUserFilter} onChange={setBlockedUserFilter} containerClassName="w-full" />
-                      <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={blockedAttemptSortOptions} value={blockedAttemptSort} onChange={setBlockedAttemptSort} containerClassName="w-full" clearLabel="Latest attempted first" clearDescription="Reset to the default sort order" />
-                      <div className="flex items-end gap-3">
-                        <ValueHelp label="IP" placeholder="All IPs" emptyLabel="No matching IPs." options={blockedIpOptions} value={blockedIpFilter} onChange={setBlockedIpFilter} containerClassName="w-full" />
-                        <button type="button" onClick={() => { setBlockedUserFilter(""); setBlockedIpFilter(""); setBlockedDatePreset(""); setBlockedDateFrom(""); setBlockedDateTo(""); setBlockedAttemptSort("attempted-desc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
-                      </div>
+                      <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={blockedRoleOptions} value={blockedRoleFilter} onChange={setBlockedRoleFilter} containerClassName="w-full" />
+                      <ValueHelp label="IP" placeholder="All IPs" emptyLabel="No matching IPs." options={blockedIpOptions} value={blockedIpFilter} onChange={setBlockedIpFilter} containerClassName="w-full" />
                       <ValueHelp label="Attempted In" placeholder="Any time" emptyLabel="No matching date ranges." options={RELATIVE_DATE_PRESET_OPTIONS} value={blockedDatePreset} onChange={setBlockedDatePreset} containerClassName="w-full" clearLabel="Any time" clearDescription="Remove the attempted-date filter" />
-                      <input type="date" value={blockedDateFrom} onChange={(event) => setBlockedDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Blocked attempt from date" />
-                      <input type="date" value={blockedDateTo} onChange={(event) => setBlockedDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Blocked attempt to date" />
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-slate-700">From Date</span>
+                        <input type="date" value={blockedDateFrom} onChange={(event) => setBlockedDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Blocked attempt from date" />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-slate-700">To Date</span>
+                        <input type="date" value={blockedDateTo} onChange={(event) => setBlockedDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Blocked attempt to date" />
+                      </label>
+                      <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={blockedAttemptSortOptions} value={blockedAttemptSort} onChange={setBlockedAttemptSort} containerClassName="w-full" clearLabel="Latest attempted first" clearDescription="Reset to the default sort order" />
+                      <div className="flex items-end">
+                        <button type="button" onClick={() => { setBlockedUserFilter(""); setBlockedRoleFilter(""); setBlockedIpFilter(""); setBlockedDatePreset(""); setBlockedDateFrom(""); setBlockedDateTo(""); setBlockedAttemptSort("attempted-desc"); }} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear</button>
+                      </div>
                     </div>
                     <div className="overflow-hidden rounded-[28px] border border-rose-200">
                       <table className="min-w-full divide-y divide-rose-100">
@@ -7988,8 +8733,14 @@ function AdminSessionsPage() {
               <ValueHelp label="Status" placeholder="All statuses" emptyLabel="No matching statuses." options={sessionStatusOptions} value={sessionStatusFilter} onChange={setSessionStatusFilter} containerClassName="w-full" />
               <ValueHelp label="IP" placeholder="All IPs" emptyLabel="No matching IPs." options={sessionIpOptions} value={sessionIpFilter} onChange={setSessionIpFilter} containerClassName="w-full" />
               <ValueHelp label="Started In" placeholder="Any time" emptyLabel="No matching date ranges." options={RELATIVE_DATE_PRESET_OPTIONS} value={sessionDatePreset} onChange={setSessionDatePreset} containerClassName="w-full" clearLabel="Any time" clearDescription="Remove the started-date filter" />
-              <input type="date" value={sessionDateFrom} onChange={(event) => setSessionDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Session from date" />
-              <input type="date" value={sessionDateTo} onChange={(event) => setSessionDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Session to date" />
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">From Date</span>
+                <input type="date" value={sessionDateFrom} onChange={(event) => setSessionDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Session from date" />
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">To Date</span>
+                <input type="date" value={sessionDateTo} onChange={(event) => setSessionDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-teal-500" aria-label="Session to date" />
+              </label>
               <ValueHelp label="Sort By" placeholder="Default sort" emptyLabel="No sorting options." options={sessionSortOptions} value={sessionSort} onChange={setSessionSort} containerClassName="w-full" clearLabel="Latest started first" clearDescription="Reset to the default sort order" />
               <div className="flex items-end">
                 <button type="button" onClick={() => { setSessionUserFilter(""); setSessionRoleFilter(""); setSessionStatusFilter(""); setSessionIpFilter(""); setSessionDatePreset(""); setSessionDateFrom(""); setSessionDateTo(""); setSessionSort("started-desc"); }} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Clear session filters</button>

@@ -549,7 +549,7 @@ export function DetailedActivityLog({ activities }: DetailedActivityLogProps) {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-4 rounded-[28px] border border-white/70 bg-white/90 px-5 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid gap-4 rounded-[28px] border border-white/70 bg-white/90 px-5 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-2 xl:grid-cols-6">
         <ValueHelp
           label="Focus"
           placeholder="All actors and records"
@@ -557,7 +557,7 @@ export function DetailedActivityLog({ activities }: DetailedActivityLogProps) {
           options={focusOptions}
           value={focusFilter}
           onChange={setFocusFilter}
-          containerClassName="min-w-[260px] flex-1"
+          containerClassName="min-w-0 w-full xl:col-span-2"
         />
 
         <ValueHelp
@@ -567,7 +567,7 @@ export function DetailedActivityLog({ activities }: DetailedActivityLogProps) {
           options={actionOptions}
           value={actionFilter}
           onChange={setActionFilter}
-          containerClassName="w-full"
+          containerClassName="min-w-0 w-full xl:col-span-2"
         />
         <ValueHelp label="Actor" placeholder="All actors" emptyLabel="No matching actors." options={actorOptions} value={actorFilter} onChange={setActorFilter} containerClassName="w-full" />
         <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={roleOptions} value={roleFilter} onChange={setRoleFilter} containerClassName="w-full" />
@@ -605,13 +605,13 @@ export function DetailedActivityLog({ activities }: DetailedActivityLogProps) {
               setDateTo("");
               setSortOrder("time-desc");
             }}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-rose-200 px-4 text-sm font-medium text-rose-700 transition hover:bg-rose-50 xl:col-span-2"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-rose-200 px-4 text-sm font-medium text-rose-700 transition hover:bg-rose-50 xl:col-span-3"
           >
             <X size={14} /> Clear
           </button>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 xl:col-span-2 xl:justify-end">
+        <div className="flex flex-wrap items-center gap-2 xl:col-span-3 xl:justify-end">
           <button
             type="button"
             onClick={exportCsv}

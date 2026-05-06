@@ -160,6 +160,7 @@ export interface DocumentRecord {
   uploadComment?: string | null;
   status: string;
   company?: string;
+  grantedUserIds?: string[];
   file?: DocumentFile;
   noteSummary?: {
     count: number;

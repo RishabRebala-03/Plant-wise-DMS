@@ -241,8 +241,12 @@ def _document_query_for_user(user: dict) -> dict:
     base = {"deleted_at": None}
     if user["role"] == "Mining Manager":
         assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
-        base["plant_id"] = {"$in": assigned} if assigned else {"$in": []}
-        base["uploaded_by_id"] = user["id"]
+        own_documents_query = {
+            "plant_id": {"$in": assigned} if assigned else {"$in": []},
+            "uploaded_by_id": user["id"],
+        }
+        granted_documents_query = {"granted_user_ids": user["id"]}
+        base["$or"] = [own_documents_query, granted_documents_query]
     return base
 
 
@@ -288,7 +292,8 @@ def _can_view_document(user: dict, document: dict) -> bool:
     if user["role"] in {"CEO", "Admin"}:
         return True
     assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
-    return document.get("plant_id") in assigned and document.get("uploaded_by_id") == user["id"]
+    granted_user_ids = document.get("granted_user_ids") or []
+    return (document.get("plant_id") in assigned and document.get("uploaded_by_id") == user["id"]) or user["id"] in granted_user_ids
 
 
 def _can_download_document(user: dict, document: dict) -> bool:
@@ -299,7 +304,8 @@ def _can_download_document(user: dict, document: dict) -> bool:
     if not user_has_capability(user, "canDownloadDocuments", get_db()):
         return False
     assigned = user.get("assigned_plant_ids") or ([user["plant_id"]] if user.get("plant_id") else [])
-    return document.get("plant_id") in assigned and document.get("uploaded_by_id") == user["id"]
+    granted_user_ids = document.get("granted_user_ids") or []
+    return (document.get("plant_id") in assigned and document.get("uploaded_by_id") == user["id"]) or user["id"] in granted_user_ids
 
 
 def _validate_uploaded_file(file) -> tuple[str, str] | None:
@@ -638,6 +644,7 @@ def create_document():
         "created_at": now,
         "updated_at": now,
         "deleted_at": None,
+        "granted_user_ids": [],
         "accessed_by": [],
         "last_receiver_access_at": None,
     }
@@ -781,6 +788,23 @@ def update_document(document_id: str):
             requestedStatus=status,
             approvalAction=status == "Approved",
         )
+
+    granted_user_ids = body.get("grantedUserIds")
+    if granted_user_ids is not None:
+        if user["role"] not in {"CEO", "Admin"}:
+            return error_response("Only executives and admins can manage document access grants", 403)
+        if not isinstance(granted_user_ids, list):
+            return error_response("Document access grants must be provided as a list", 400)
+        cleaned_user_ids = []
+        for value in granted_user_ids:
+            normalized = str(value or "").strip()
+            if not normalized or normalized in cleaned_user_ids:
+                continue
+            recipient = db.users.find_one({"id": normalized, "status": "Active"})
+            if not recipient:
+                return error_response(f"User {normalized} was not found or is inactive", 404)
+            cleaned_user_ids.append(normalized)
+        updates["granted_user_ids"] = cleaned_user_ids
 
     file = request.files.get("file")
     if file and file.filename:

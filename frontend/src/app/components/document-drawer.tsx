@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Save, Lock, Globe, MessageSquare, Download } from "lucide-react";
+import { X, Save, Lock, Globe, MessageSquare, Download, ExternalLink } from "lucide-react";
 import { categoryOptions } from "../lib/api";
 import { formatDetailedTimestamp, getDocumentTimestamp } from "../lib/datetime";
 import type { Comment, DocumentRecord } from "../lib/types";
@@ -58,6 +58,7 @@ export function DocumentDrawer({
     && (user?.role === "CEO"
       || user?.role === "Admin"
       || (user?.role === "Mining Manager" && doc.uploadedById === user.id));
+  const canViewOriginal = Boolean(user?.role === "CEO" || user?.role === "Admin" || user?.role === "Mining Manager");
   const detailRows = [
     ["Document ID", doc.id],
     ["Document Name", doc.name],
@@ -122,6 +123,14 @@ export function DocumentDrawer({
     }
   }
 
+  async function handleOpenOriginal() {
+    try {
+      await documentsApi.openFileInNewTab(doc.id);
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "Unable to open the original document.");
+    }
+  }
+
   async function handleUpdate() {
     if (!onUpdateDocument) return;
     setUpdating(true);
@@ -147,10 +156,10 @@ export function DocumentDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-[#0c1628]/32 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative h-full w-full max-w-[600px] overflow-hidden border-l border-[#d9e1ec] bg-[#f5f8fc] shadow-2xl">
-        <div className="flex h-full flex-col">
+      <div className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-[1100px] overflow-hidden rounded-[32px] border border-[#d9e1ec] bg-[#f5f8fc] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+        <div className="flex h-full min-h-0 w-full flex-col">
           <div className="shrink-0 border-b border-white/10 bg-[linear-gradient(135deg,#111827_0%,#243b53_100%)] px-6 py-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -215,19 +224,30 @@ export function DocumentDrawer({
                       The file preview is hidden here. Use the actions below to open or download the original upload.
                     </p>
                   </div>
-                  {hasAttachedFile && canDownload && (
-                    <button
-                      onClick={() => void handleDownload()}
-                      className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d6e1ee] bg-[#f8fbff] px-4 text-[#27415e] transition hover:border-[#b8cadf] hover:bg-[#eef5fc] cursor-pointer"
-                      style={{ fontSize: 13, fontWeight: 500 }}
-                    >
-                      <Download size={14} /> Download
-                    </button>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {hasAttachedFile && canViewOriginal ? (
+                      <button
+                        onClick={() => void handleOpenOriginal()}
+                        className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-white transition hover:bg-slate-800 cursor-pointer"
+                        style={{ fontSize: 13, fontWeight: 500 }}
+                      >
+                        <ExternalLink size={14} /> Open original file
+                      </button>
+                    ) : null}
+                    {hasAttachedFile && canDownload ? (
+                      <button
+                        onClick={() => void handleDownload()}
+                        className="inline-flex h-10 items-center gap-2 rounded-full border border-[#d6e1ee] bg-[#f8fbff] px-4 text-[#27415e] transition hover:border-[#b8cadf] hover:bg-[#eef5fc] cursor-pointer"
+                        style={{ fontSize: 13, fontWeight: 500 }}
+                      >
+                        <Download size={14} /> Prepare download
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 {hasAttachedFile && !canDownload ? (
                   <div className="mt-4 rounded-2xl border border-[#dce4f0] bg-[#f8fbff] px-4 py-3 text-[#425466]" style={{ fontSize: 12 }}>
-                    Downloads are restricted. Managers can only download their own documents when CEO/Admin grant download access.
+                    Downloads are restricted. You can still open the original file in-app, but `Prepare download` only appears when download access is granted.
                   </div>
                 ) : null}
                 {fileError && (

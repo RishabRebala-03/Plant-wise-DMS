@@ -93,6 +93,7 @@ def serialize_document(document: dict[str, Any], comments: list[dict[str, Any]] 
         "uploadComment": document.get("upload_comment"),
         "status": document.get("status", "Draft"),
         "company": document.get("company", "Midwest Ltd"),
+        "grantedUserIds": document.get("granted_user_ids", []),
         "file": {
             "name": document.get("file_name"),
             "contentType": document.get("content_type"),

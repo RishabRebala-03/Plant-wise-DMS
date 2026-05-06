@@ -416,8 +416,16 @@ export function enrichDocuments(
       : new Set(plants.map((plant) => plant.id));
 
   const enriched: EnrichedDocument[] = documents
-    .filter((document) => allowedPlantIds.has(document.plantId))
-    .filter((document) => currentUser?.role !== "Mining Manager" || document.uploadedById === currentUser.id)
+    .filter((document) => (
+      currentUser?.role !== "Mining Manager"
+      || allowedPlantIds.has(document.plantId)
+      || Boolean(document.grantedUserIds?.includes(currentUser.id))
+    ))
+    .filter((document) => (
+      currentUser?.role !== "Mining Manager"
+      || document.uploadedById === currentUser.id
+      || Boolean(document.grantedUserIds?.includes(currentUser.id))
+    ))
     .map((document) => {
       const assignedProjectId = projectAssignments[document.id];
       const project =
@@ -432,7 +440,7 @@ export function enrichDocuments(
 
       return {
         ...document,
-        projectId: project.id,
+        projectId: document.projectId || project.id,
         projectName: document.projectName || project.name,
         managerName: project.owner,
         identifier: `${document.plantId}-${document.id}`,

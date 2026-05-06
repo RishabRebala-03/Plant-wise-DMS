@@ -89,6 +89,11 @@ export function ManagerUpload() {
   const [recentUploadQuery, setRecentUploadQuery] = useState("");
   const [recentUploadPlantFilter, setRecentUploadPlantFilter] = useState("");
   const [recentUploadCategoryFilter, setRecentUploadCategoryFilter] = useState("");
+  const [recentUploadUploaderFilter, setRecentUploadUploaderFilter] = useState("");
+  const [recentUploadProjectFilter, setRecentUploadProjectFilter] = useState("");
+  const [recentUploadStatusFilter, setRecentUploadStatusFilter] = useState("");
+  const [recentUploadDateFrom, setRecentUploadDateFrom] = useState("");
+  const [recentUploadDateTo, setRecentUploadDateTo] = useState("");
   const [recentUploadSort, setRecentUploadSort] = useState("uploaded-desc");
   const [governancePolicy, setGovernancePolicy] = useState<GovernancePolicy>({
     allowedUploadFormats: ["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"],
@@ -181,6 +186,18 @@ export function ManagerUpload() {
     () => Array.from(new Set((data?.recentUploads || []).map((document) => document.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [data?.recentUploads],
   );
+  const recentUploadUploaders = useMemo(
+    () => Array.from(new Set((data?.recentUploads || []).map((document) => document.uploadedBy).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data?.recentUploads],
+  );
+  const recentUploadProjects = useMemo(
+    () => Array.from(new Set((data?.recentUploads || []).map((document) => document.projectName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data?.recentUploads],
+  );
+  const recentUploadStatuses = useMemo(
+    () => Array.from(new Set((data?.recentUploads || []).map((document) => document.status).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data?.recentUploads],
+  );
   const filteredRecentUploads = useMemo(() => {
     const query = recentUploadQuery.trim().toLowerCase();
     const scopedUploads = (data?.recentUploads || []).filter((document) => {
@@ -188,7 +205,13 @@ export function ManagerUpload() {
         .some((value) => (value || "").toLowerCase().includes(query));
       const matchesPlant = !recentUploadPlantFilter || document.plant === recentUploadPlantFilter;
       const matchesCategory = !recentUploadCategoryFilter || document.category === recentUploadCategoryFilter;
-      return matchesQuery && matchesPlant && matchesCategory;
+      const matchesUploader = !recentUploadUploaderFilter || document.uploadedBy === recentUploadUploaderFilter;
+      const matchesProject = !recentUploadProjectFilter || document.projectName === recentUploadProjectFilter;
+      const matchesStatus = !recentUploadStatusFilter || document.status === recentUploadStatusFilter;
+      const uploadDate = (document.uploadedAt || document.date || "").slice(0, 10);
+      const matchesFrom = !recentUploadDateFrom || Boolean(uploadDate && uploadDate >= recentUploadDateFrom);
+      const matchesTo = !recentUploadDateTo || Boolean(uploadDate && uploadDate <= recentUploadDateTo);
+      return matchesQuery && matchesPlant && matchesCategory && matchesUploader && matchesProject && matchesStatus && matchesFrom && matchesTo;
     });
     return [...scopedUploads].sort((left, right) => {
       switch (recentUploadSort) {
@@ -207,7 +230,7 @@ export function ManagerUpload() {
           return (right.uploadedAt || right.date || "").localeCompare(left.uploadedAt || left.date || "");
       }
     });
-  }, [data?.recentUploads, recentUploadCategoryFilter, recentUploadPlantFilter, recentUploadQuery, recentUploadSort]);
+  }, [data?.recentUploads, recentUploadCategoryFilter, recentUploadDateFrom, recentUploadDateTo, recentUploadPlantFilter, recentUploadProjectFilter, recentUploadQuery, recentUploadSort, recentUploadStatusFilter, recentUploadUploaderFilter]);
 
   function handleSelectedFile(nextFile: File | null) {
     if (!uploadAllowedNow) {
@@ -573,7 +596,7 @@ export function ManagerUpload() {
             <h2 className="text-lg font-semibold text-slate-900">Recent uploads in your scope</h2>
             <p className="mt-1 text-sm text-slate-500">Only documents tied to your assigned plants are listed here.</p>
           </div>
-          <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <ValueHelp
               label="Search"
               placeholder="Document, plant, category, uploader"
@@ -601,6 +624,41 @@ export function ManagerUpload() {
                 ))}
               </select>
             </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Uploader</span>
+              <select value={recentUploadUploaderFilter} onChange={(event) => setRecentUploadUploaderFilter(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                <option value="">All uploaders</option>
+                {recentUploadUploaders.map((uploader) => (
+                  <option key={uploader} value={uploader}>{uploader}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Project</span>
+              <select value={recentUploadProjectFilter} onChange={(event) => setRecentUploadProjectFilter(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                <option value="">All projects</option>
+                {recentUploadProjects.map((project) => (
+                  <option key={project} value={project}>{project}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Status</span>
+              <select value={recentUploadStatusFilter} onChange={(event) => setRecentUploadStatusFilter(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                <option value="">All statuses</option>
+                {recentUploadStatuses.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">From Date</span>
+              <input type="date" value={recentUploadDateFrom} onChange={(event) => setRecentUploadDateFrom(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">To Date</span>
+              <input type="date" value={recentUploadDateTo} onChange={(event) => setRecentUploadDateTo(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+            </label>
             <div className="flex items-end gap-3">
               <label className="w-full space-y-2 text-sm">
                 <span className="font-medium text-slate-700">Sort by</span>
@@ -613,7 +671,7 @@ export function ManagerUpload() {
                   <option value="plant-desc">Plant Z-A</option>
                 </select>
               </label>
-              <button type="button" onClick={() => { setRecentUploadQuery(""); setRecentUploadPlantFilter(""); setRecentUploadCategoryFilter(""); setRecentUploadSort("uploaded-desc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+              <button type="button" onClick={() => { setRecentUploadQuery(""); setRecentUploadPlantFilter(""); setRecentUploadCategoryFilter(""); setRecentUploadUploaderFilter(""); setRecentUploadProjectFilter(""); setRecentUploadStatusFilter(""); setRecentUploadDateFrom(""); setRecentUploadDateTo(""); setRecentUploadSort("uploaded-desc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
                 Clear
               </button>
             </div>
