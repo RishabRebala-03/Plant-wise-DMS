@@ -109,31 +109,8 @@ def get_access_rule_for_role(db, role: str) -> dict[str, Any]:
 
 
 def user_capabilities(user: dict[str, Any], db) -> dict[str, bool]:
-    if user.get("role") == "Admin":
-        return {
-            "canCreateProjects": True,
-            "canUploadDocuments": True,
-            "canDownloadDocuments": True,
-            "canAccessDashboard": True,
-            "canAccessPlants": True,
-            "canAccessProjects": True,
-            "canAccessDocuments": True,
-            "canAccessAnalytics": True,
-            "canAccessAuditLogs": True,
-            "canAccessSessions": True,
-            "canAccessSettings": True,
-            "canAccessUsers": True,
-            "canAccessMasterData": True,
-            "canAccessAccessControl": True,
-            "canAccessIpConfiguration": True,
-            "canEditDocuments": True,
-            "canDeleteDocuments": True,
-            "canManageUsers": True,
-            "canConfigureIp": True,
-        }
-
     rule = get_access_rule_for_role(db, user.get("role", ""))
-    return {
+    capabilities = {
         "canCreateProjects": bool(rule.get("canCreateProjects")),
         "canUploadDocuments": bool(rule.get("canUploadDocuments")),
         "canDownloadDocuments": bool(rule.get("canDownloadDocuments")),
@@ -154,6 +131,11 @@ def user_capabilities(user: dict[str, Any], db) -> dict[str, bool]:
         "canManageUsers": bool(rule.get("canManageUsers")),
         "canConfigureIp": bool(rule.get("canConfigureIp")),
     }
+    overrides = user.get("capability_overrides") if isinstance(user.get("capability_overrides"), dict) else {}
+    for key, value in overrides.items():
+        if key in capabilities and isinstance(value, bool):
+            capabilities[key] = value
+    return capabilities
 
 
 def user_has_capability(user: dict[str, Any], capability: str, db) -> bool:

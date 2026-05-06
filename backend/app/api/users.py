@@ -69,6 +69,19 @@ def _record_user_activity(action: str, actor: dict, target: dict, **metadata):
     )
 
 
+def _sanitize_capability_overrides(overrides: object) -> dict[str, bool] | None:
+    if overrides is None:
+        return None
+    if not isinstance(overrides, dict):
+        return {}
+    allowed_keys = {"canDownloadDocuments"}
+    sanitized: dict[str, bool] = {}
+    for key, value in overrides.items():
+        if key in allowed_keys and isinstance(value, bool):
+            sanitized[key] = value
+    return sanitized
+
+
 def _parse_date_boundary(value: str, *, end_of_day: bool = False) -> datetime | None:
     try:
         parsed = datetime.strptime(value, "%Y-%m-%d")
@@ -175,6 +188,7 @@ def create_user():
         "assigned_plant_names": plant_names,
         "password_hash": hash_password(password),
         "notification_preferences": body.get("notificationPreferences", {}),
+        "capability_overrides": _sanitize_capability_overrides(body.get("capabilityOverrides")) or {},
         "display_preferences": body.get("displayPreferences", {}),
         "security": {"two_factor_enabled": False, "last_password_change_at": now},
         "active_session_id": None,
@@ -224,6 +238,9 @@ def update_user(user_id: str):
     if body.get("password"):
         updates["password_hash"] = hash_password(body["password"])
         updates["security.last_password_change_at"] = utc_now()
+    capability_overrides = _sanitize_capability_overrides(body.get("capabilityOverrides"))
+    if capability_overrides is not None:
+        updates["capability_overrides"] = capability_overrides
 
     if not updates:
         return error_response("No updates were supplied", 400)

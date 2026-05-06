@@ -28,6 +28,7 @@ def serialize_user(user: dict[str, Any]) -> dict[str, Any]:
         "displayPreferences": user.get("display_preferences", {}),
         "accessRule": access_rule,
         "capabilities": user_capabilities(user, db),
+        "capabilityOverrides": user.get("capability_overrides", {}),
         "security": {
             "twoFactorEnabled": user.get("security", {}).get("two_factor_enabled", False),
             "lastPasswordChangeAt": to_iso(user.get("security", {}).get("last_password_change_at")),

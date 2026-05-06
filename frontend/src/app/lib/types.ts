@@ -57,6 +57,9 @@ export interface User {
     canManageUsers?: boolean;
     canConfigureIp?: boolean;
   };
+  capabilityOverrides?: {
+    canDownloadDocuments?: boolean;
+  };
   displayPreferences?: {
     table_density?: string;
     language?: string;

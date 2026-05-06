@@ -271,6 +271,12 @@ export function readPortalState(plants: Plant[], documents: DocumentRecord[]): P
 
   try {
     const parsed = JSON.parse(raw) as Partial<PortalState>;
+    const parsedRules = Array.isArray(parsed.accessRules)
+      ? DEFAULT_ACCESS_RULES.map((fallbackRule) => {
+        const matchingRule = parsed.accessRules?.find((rule) => rule.role === fallbackRule.role);
+        return { ...fallbackRule, ...(matchingRule || {}) };
+      })
+      : fallback.accessRules;
     return {
       ...fallback,
       ...parsed,
@@ -281,7 +287,7 @@ export function readPortalState(plants: Plant[], documents: DocumentRecord[]): P
           source: "custom" as const,
         })),
       ],
-      accessRules: parsed.accessRules || fallback.accessRules,
+      accessRules: parsedRules,
       ipRules: parsed.ipRules || fallback.ipRules,
       sessionPolicy: parsed.sessionPolicy || fallback.sessionPolicy,
       managerDocumentLocks: parsed.managerDocumentLocks || {},
@@ -320,14 +326,21 @@ export function createProject(
 }
 
 export function updateAccessRules(state: PortalState, accessRules: AccessRule[]) {
+  const normalizedRules = DEFAULT_ACCESS_RULES.map((fallbackRule) => {
+    const matchingRule = accessRules.find((rule) => rule.role === fallbackRule.role);
+    return { ...fallbackRule, ...(matchingRule || {}) };
+  });
   return {
     ...state,
-    accessRules,
+    accessRules: normalizedRules,
   };
 }
 
 export function getAccessRuleForRole(accessRules: AccessRule[], role: UserRole) {
-  return accessRules.find((rule) => rule.role === role) || null;
+  const fallbackRule = DEFAULT_ACCESS_RULES.find((rule) => rule.role === role) || null;
+  const matchingRule = accessRules.find((rule) => rule.role === role);
+  if (!fallbackRule && !matchingRule) return null;
+  return { ...(fallbackRule || {}), ...(matchingRule || {}) } as AccessRule;
 }
 
 export function hasAccessCapability(rule: AccessRule | null, capability: AccessCapability) {

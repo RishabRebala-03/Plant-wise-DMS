@@ -189,16 +189,18 @@ function usePortal() {
 function useRoleAccess() {
   const { user, portalState } = usePortal();
   const accessRule = useMemo(
-    () => (user.accessRule?.role ? user.accessRule as AccessRule : getAccessRuleForRole(portalState.accessRules, user.role)),
+    () => getAccessRuleForRole(portalState.accessRules, user.role) || (user.accessRule?.role ? user.accessRule as AccessRule : null),
     [portalState.accessRules, user.accessRule, user.role],
   );
 
   function can(capability: AccessCapability) {
-    if (user.role === "Admin") return true;
+    if (accessRule) {
+      return hasAccessCapability(accessRule, capability);
+    }
     if (user.capabilities && capability in user.capabilities) {
       return Boolean(user.capabilities[capability]);
     }
-    return hasAccessCapability(accessRule, capability);
+    return false;
   }
 
   return { accessRule, can };
@@ -455,7 +457,11 @@ function PortalProvider({ user, children }: { user: User; children: ReactNode })
     setPortalState((current) => {
       const next = readPortalState(plantsResult.items, documentsResult.items);
       const backendProjects = projectsResult.items as ProjectRecord[];
-      return current.projects.length === 0 ? { ...next, projects: backendProjects.concat(next.projects) } : {
+      return current.projects.length === 0 ? {
+        ...next,
+        accessRules: accessRulesResult.items.length ? accessRulesResult.items : next.accessRules,
+        projects: backendProjects.concat(next.projects),
+      } : {
         ...next,
         accessRules: accessRulesResult.items.length ? accessRulesResult.items : next.accessRules,
         ipRules: current.ipRules,
@@ -6170,6 +6176,8 @@ function AdminAccessPage() {
   const [managerAssignmentHealthFilter, setManagerAssignmentHealthFilter] = useState("");
   const [managerScopeCountFilter, setManagerScopeCountFilter] = useState("");
   const [managerSort, setManagerSort] = useState("name-asc");
+  const [managerPlantSearch, setManagerPlantSearch] = useState<Record<string, string>>({});
+  const [managerAssignedOnly, setManagerAssignedOnly] = useState<Record<string, boolean>>({});
   const managerUsers = users.filter((candidate) => candidate.role === "Mining Manager");
   const managersNeedingScope = managerUsers.filter((manager) => !(manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : [])).length);
   const capabilityLabelMap: Record<AccessCapability, string> = {
@@ -6193,7 +6201,11 @@ function AdminAccessPage() {
     canManageUsers: "Manage users",
     canConfigureIp: "Configure IP",
   };
-  const roleOptions = useMemo(() => buildValueHelpOptions(portalState.accessRules.map((rule) => formatRole(rule.role)), "Role"), [portalState.accessRules]);
+  const normalizedAccessRules = useMemo(
+    () => updateAccessRules(portalState, portalState.accessRules).accessRules,
+    [portalState],
+  );
+  const roleOptions = useMemo(() => buildValueHelpOptions(normalizedAccessRules.map((rule) => formatRole(rule.role)), "Role"), [normalizedAccessRules]);
   const capabilityOptions = useMemo<ValueHelpOption[]>(
     () => Object.entries(capabilityLabelMap).map(([value, label]) => ({ value, label, meta: "Capability" })),
     [],
@@ -6251,7 +6263,7 @@ function AdminAccessPage() {
     ],
     [],
   );
-  const filteredRoleRules = useMemo(() => portalState.accessRules.filter((rule) => {
+  const filteredRoleRules = useMemo(() => normalizedAccessRules.filter((rule) => {
     const enabledCapabilities = (Object.keys(capabilityLabelMap) as AccessCapability[]).filter((capability) => rule[capability]);
     const uploadState = rule.canUploadDocuments ? "Enabled" : "Disabled";
     const userManagementState = rule.canManageUsers ? "Enabled" : "Disabled";
@@ -6260,7 +6272,7 @@ function AdminAccessPage() {
       && matchesValueHelpFilter(roleCapabilityFilter, ...enabledCapabilities.map((capability) => capabilityLabelMap[capability]))
       && matchesValueHelpFilter(roleUploadFilter, uploadState)
       && matchesValueHelpFilter(roleUserManagementFilter, userManagementState);
-  }), [portalState.accessRules, roleFilter, roleCapabilityFilter, roleUploadFilter, roleUserManagementFilter]);
+  }), [normalizedAccessRules, roleFilter, roleCapabilityFilter, roleUploadFilter, roleUserManagementFilter]);
   const sortedRoleRules = useMemo(() => {
     const next = [...filteredRoleRules];
     next.sort((left, right) => {
@@ -6322,7 +6334,7 @@ function AdminAccessPage() {
     return next;
   }, [filteredManagers, managerSort]);
   const allRoleExportRows = useMemo<ExportRow[]>(
-    () => portalState.accessRules.map((rule) => ({
+    () => normalizedAccessRules.map((rule) => ({
       role: formatRole(rule.role),
       createProjects: rule.canCreateProjects ? "Yes" : "No",
       uploadDocuments: rule.canUploadDocuments ? "Yes" : "No",
@@ -6344,7 +6356,7 @@ function AdminAccessPage() {
       manageUsers: rule.canManageUsers ? "Yes" : "No",
       configureIp: rule.canConfigureIp ? "Yes" : "No",
     })),
-    [portalState.accessRules],
+    [normalizedAccessRules],
   );
   const filteredRoleExportRows = useMemo<ExportRow[]>(
     () => sortedRoleRules.map((rule) => ({
@@ -6403,7 +6415,7 @@ function AdminAccessPage() {
   );
 
   async function updateRule(index: number, field: keyof AccessRule, value: string | boolean) {
-    const next = portalState.accessRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule);
+    const next = normalizedAccessRules.map((rule, ruleIndex) => ruleIndex === index ? { ...rule, [field]: value } : rule);
     setSavingRules(true);
     setRulesMessage("");
     try {
@@ -6422,6 +6434,21 @@ function AdminAccessPage() {
       const current = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
       const next = checked ? [...current, plantId] : current.filter((item) => item !== plantId);
       await usersApi.update(manager.id, { assignedPlantIds: next });
+      await refreshData();
+    } finally {
+      setSavingManagerId(null);
+    }
+  }
+
+  async function toggleManagerDownloadAccess(manager: User, checked: boolean) {
+    setSavingManagerId(manager.id);
+    try {
+      await usersApi.update(manager.id, {
+        capabilityOverrides: {
+          ...(manager.capabilityOverrides || {}),
+          canDownloadDocuments: checked,
+        },
+      });
       await refreshData();
     } finally {
       setSavingManagerId(null);
@@ -6493,7 +6520,7 @@ function AdminAccessPage() {
         </div>
         <div className="grid gap-4">
           {sortedRoleRules.map((rule) => {
-            const index = portalState.accessRules.findIndex((candidate) => candidate.role === rule.role);
+            const index = normalizedAccessRules.findIndex((candidate) => candidate.role === rule.role);
             return (
             <div key={rule.role} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
               <div className="mb-4">
@@ -6561,6 +6588,22 @@ function AdminAccessPage() {
         <div className="space-y-4">
           {sortedManagers.map((manager) => {
             const selected = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
+            const plantSearch = (managerPlantSearch[manager.id] || "").trim().toLowerCase();
+            const assignedOnly = Boolean(managerAssignedOnly[manager.id]);
+            const visiblePlants = plants.filter((plant) => {
+              const matchesSearch = !plantSearch || [
+                plant.name,
+                plant.plant,
+                plant.plantName,
+                plant.plantName2,
+                plant.company,
+                plant.location,
+                plant.manager,
+                plant.id,
+              ].filter(Boolean).join(" ").toLowerCase().includes(plantSearch);
+              const matchesAssigned = !assignedOnly || selected.includes(plant.id);
+              return matchesSearch && matchesAssigned;
+            });
             return (
               <div key={manager.id} className="rounded-[28px] border border-slate-200 bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -6568,10 +6611,54 @@ function AdminAccessPage() {
                     <div className="text-lg font-semibold text-slate-900">{manager.name}</div>
                     <div className="mt-1 text-sm text-slate-500">{manager.email}</div>
                   </div>
-                  <div className="text-sm text-slate-500">{selected.length} plant{selected.length === 1 ? "" : "s"} assigned</div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <span>Download access</span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(manager.capabilityOverrides?.canDownloadDocuments)}
+                        disabled={savingManagerId === manager.id}
+                        onChange={(event) => void toggleManagerDownloadAccess(manager, event.target.checked)}
+                        className="h-4 w-4 accent-teal-600"
+                      />
+                    </label>
+                    <div className="text-sm text-slate-500">{selected.length} plant{selected.length === 1 ? "" : "s"} assigned</div>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <label className="relative min-w-[240px] flex-1">
+                    <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={managerPlantSearch[manager.id] || ""}
+                      onChange={(event) => setManagerPlantSearch((current) => ({ ...current, [manager.id]: event.target.value }))}
+                      placeholder="Search plants for this manager"
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-teal-500"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={assignedOnly}
+                      onChange={(event) => setManagerAssignedOnly((current) => ({ ...current, [manager.id]: event.target.checked }))}
+                      className="h-4 w-4 accent-teal-600"
+                    />
+                    <span>Assigned only</span>
+                  </label>
+                  {(managerPlantSearch[manager.id] || assignedOnly) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManagerPlantSearch((current) => ({ ...current, [manager.id]: "" }));
+                        setManagerAssignedOnly((current) => ({ ...current, [manager.id]: false }));
+                      }}
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {plants.map((plant) => (
+                  {visiblePlants.map((plant) => (
                     <label key={`${manager.id}-${plant.id}`} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
                       <span>{plant.name}</span>
                       <input
@@ -6583,6 +6670,11 @@ function AdminAccessPage() {
                       />
                     </label>
                   ))}
+                  {!visiblePlants.length ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">
+                      No plants matched this manager filter.
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );
