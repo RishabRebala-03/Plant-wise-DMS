@@ -1449,6 +1449,31 @@ function ManagerDashboardPage() {
     : 0;
   const reviewCompletion = myDocuments.length ? Math.round((approvedDocuments.length / myDocuments.length) * 100) : 0;
   const managerGreetingName = user.firstName || user.name.split(" ")[0] || "there";
+  const weekAgo = isoDateOnly(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7));
+  const today = isoDateOnly(new Date());
+
+  function openManagerDocuments(filters?: {
+    status?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+    locked?: boolean;
+  }) {
+    const params = new URLSearchParams();
+    params.set("tab", "own");
+    if (filters?.status?.length) {
+      params.set("status", filters.status.join(","));
+    }
+    if (filters?.dateFrom) {
+      params.set("dateFrom", filters.dateFrom);
+    }
+    if (filters?.dateTo) {
+      params.set("dateTo", filters.dateTo);
+    }
+    if (filters?.locked) {
+      params.set("locked", "true");
+    }
+    navigate(`/documents?${params.toString()}`);
+  }
 
   return (
     <div className="space-y-6">
@@ -1487,7 +1512,11 @@ function ManagerDashboardPage() {
 
       <div className="grid gap-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+          <button
+            type="button"
+            onClick={() => openManagerDocuments({ dateFrom: weekAgo, dateTo: today })}
+            className="rounded-[28px] border border-white/80 bg-white/90 p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-slate-300"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-500">Uploads this week</div>
@@ -1498,8 +1527,12 @@ function ManagerDashboardPage() {
               </div>
             </div>
             <div className="mt-3 text-sm text-slate-600">Fresh document flow across your assigned plant scope.</div>
-          </div>
-          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+          </button>
+          <button
+            type="button"
+            onClick={() => openManagerDocuments({ status: ["In Review", "Action Required"] })}
+            className="rounded-[28px] border border-white/80 bg-white/90 p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-slate-300"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-500">Pending review</div>
@@ -1510,8 +1543,12 @@ function ManagerDashboardPage() {
               </div>
             </div>
             <div className="mt-3 text-sm text-slate-600">{inReviewDocuments.length} in review and {actionRequiredDocuments.length} needing action.</div>
-          </div>
-          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/projects")}
+            className="rounded-[28px] border border-white/80 bg-white/90 p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-slate-300"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-500">Project coverage</div>
@@ -1522,8 +1559,12 @@ function ManagerDashboardPage() {
               </div>
             </div>
             <div className="mt-3 text-sm text-slate-600">Projects in your queue that already have document activity.</div>
-          </div>
-          <div className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
+          </button>
+          <button
+            type="button"
+            onClick={() => openManagerDocuments({ status: ["Approved"] })}
+            className="rounded-[28px] border border-white/80 bg-white/90 p-5 text-left shadow-[0_18px_50px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-slate-300"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-500">Review completion</div>
@@ -1534,7 +1575,7 @@ function ManagerDashboardPage() {
               </div>
             </div>
             <div className="mt-3 text-sm text-slate-600">Share of scoped documents already approved.</div>
-          </div>
+          </button>
         </div>
 
         <div className="rounded-[32px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]">
@@ -1546,12 +1587,29 @@ function ManagerDashboardPage() {
           </div>
           <div className="grid gap-6 xl:grid-cols-2">
             <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
-              <div className="text-sm font-semibold text-slate-900">Document status mix</div>
+              <div className="text-sm font-semibold text-slate-900">Document status overview</div>
               <div className="mt-1 text-sm text-slate-500">Approved versus active review pressure in your current scope.</div>
               <div className="mt-4 h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={statusSeries.length ? statusSeries : [{ name: "No documents", value: 1, fill: "#cbd5e1" }]} dataKey="value" nameKey="name" innerRadius={62} outerRadius={98} paddingAngle={3}>
+                    <Pie
+                      data={statusSeries.length ? statusSeries : [{ name: "No documents", value: 1, fill: "#cbd5e1" }]}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={62}
+                      outerRadius={98}
+                      paddingAngle={3}
+                      cursor={statusSeries.length ? "pointer" : "default"}
+                      onClick={(entry) => {
+                        const statusName = (entry as { name?: string } | undefined)?.name;
+                        if (!statusName || statusName === "No documents") return;
+                        if (statusName === "Locked") {
+                          openManagerDocuments({ locked: true });
+                          return;
+                        }
+                        openManagerDocuments({ status: [statusName] });
+                      }}
+                    >
                       {(statusSeries.length ? statusSeries : [{ name: "No documents", value: 1, fill: "#cbd5e1" }]).map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
                       ))}
@@ -1562,7 +1620,11 @@ function ManagerDashboardPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4">
+            <button
+              type="button"
+              onClick={() => navigate("/projects")}
+              className="rounded-[28px] border border-slate-200 bg-slate-50/80 p-4 text-left transition hover:border-slate-300 hover:bg-slate-100/80"
+            >
               <div className="text-sm font-semibold text-slate-900">Project documentation readiness</div>
               <div className="mt-1 text-sm text-slate-500">How many projects already have a document trail attached.</div>
               <div className="mt-4 h-[280px]">
@@ -1572,7 +1634,7 @@ function ManagerDashboardPage() {
                     <XAxis dataKey="name" tickLine={false} axisLine={false} />
                     <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
                     <Tooltip cursor={{ fill: "rgba(148, 163, 184, 0.12)" }} />
-                    <Bar dataKey="value" radius={[14, 14, 0, 0]}>
+                    <Bar dataKey="value" radius={[14, 14, 0, 0]} cursor="pointer">
                       {projectHealthSeries.map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
                       ))}
@@ -1580,7 +1642,7 @@ function ManagerDashboardPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -1598,22 +1660,22 @@ function ManagerDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                <tr className="cursor-pointer transition hover:bg-slate-50" onClick={() => navigate(`/plants/${primaryPlantId(user)}`)}>
                   <td className="text-strong">Assigned plants</td>
                   <td>{user.assignedPlants?.join(", ") || user.plant || "Assigned scope"}</td>
                   <td>Confirms the plant coverage this dashboard is tracking.</td>
                 </tr>
-                <tr>
+                <tr className="cursor-pointer transition hover:bg-slate-50" onClick={() => openManagerDocuments({ dateFrom: weekAgo, dateTo: today })}>
                   <td className="text-strong">Latest upload</td>
                   <td>{lastUploadDocument ? `${lastUploadDocument.name} • ${formatDateTime(lastUploadDocument.uploadedAt || lastUploadDocument.date)}` : "No uploads recorded yet"}</td>
                   <td>Highlights the most recent field activity entering the system.</td>
                 </tr>
-                <tr>
+                <tr className="cursor-pointer transition hover:bg-slate-50" onClick={() => openManagerDocuments({ locked: true })}>
                   <td className="text-strong">Locked records</td>
                   <td>{lockedDocuments.length} documents in controlled read-only mode</td>
                   <td>Shows how much of your workspace has moved into restricted access.</td>
                 </tr>
-                <tr>
+                <tr className="cursor-pointer transition hover:bg-slate-50" onClick={() => openManagerDocuments({ status: ["In Review", "Action Required"] })}>
                   <td className="text-strong">Open review workload</td>
                   <td>{inReviewDocuments.length + actionRequiredDocuments.length} documents still moving through approval</td>
                   <td>Helps prioritize follow-up with site teams and reviewers.</td>
@@ -2495,16 +2557,18 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
   const [manager, setManager] = useState(searchParams.get("manager") || "");
   const [identifier, setIdentifier] = useState(searchParams.get("identifier") || "");
   const [category, setCategory] = useState(searchParams.get("category") || "");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
   const [plantId, setPlantId] = useState(scopedPlantId || (user.role === "Mining Manager" ? (searchParams.get("plantId") || "") : searchParams.get("plantId") || ""));
   const [projectId, setProjectId] = useState(scopedProjectId || searchParams.get("projectId") || "");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [datePreset, setDatePreset] = useState("");
+  const [dateFrom, setDateFrom] = useState(searchParams.get("dateFrom") || "");
+  const [dateTo, setDateTo] = useState(searchParams.get("dateTo") || "");
+  const [datePreset, setDatePreset] = useState(searchParams.get("datePreset") || "");
   const [documentSort, setDocumentSort] = useState("uploaded-desc");
   const [managerDocumentTab, setManagerDocumentTab] = useState<"own" | "other">("own");
   const [serverDocuments, setServerDocuments] = useState<EnrichedDocument[]>(documents);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: documents.length });
+  const [lockedOnly, setLockedOnly] = useState(searchParams.get("locked") === "true");
 
   useEffect(() => {
     if (scopedPlantId) setPlantId(scopedPlantId);
@@ -2516,6 +2580,11 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
     setManager(searchParams.get("manager") || "");
     setIdentifier(searchParams.get("identifier") || "");
     setCategory(searchParams.get("category") || "");
+    setStatusFilter(searchParams.get("status") || "");
+    setDateFrom(searchParams.get("dateFrom") || "");
+    setDateTo(searchParams.get("dateTo") || "");
+    setDatePreset(searchParams.get("datePreset") || "");
+    setLockedOnly(searchParams.get("locked") === "true");
     if (!scopedPlantId) {
       setPlantId(searchParams.get("plantId") || "");
     }
@@ -2577,6 +2646,10 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
   );
   const effectiveDateFrom = datePreset ? (resolveRelativeDateRange(datePreset)?.from || "") : dateFrom;
   const effectiveDateTo = datePreset ? (resolveRelativeDateRange(datePreset)?.to || "") : dateTo;
+  const selectedStatuses = useMemo(
+    () => statusFilter.split(",").map((value) => value.trim()).filter(Boolean),
+    [statusFilter],
+  );
 
   useEffect(() => {
     let active = true;
@@ -2621,13 +2694,15 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
     const matchesPlant = !plantId || document.plantId === plantId;
     const matchesProject = !projectId || document.projectId === projectId;
     const matchesCategory = !category || document.category === category;
+    const matchesStatus = !selectedStatuses.length || selectedStatuses.includes(document.status);
     const matchesManager = !manager || document.managerName === manager;
     const matchesIdentifier = !identifier || document.identifier === identifier;
     const matchesQuery = !query || [document.name, document.plant, document.projectName, document.category, document.uploadedBy].join(" ").toLowerCase().includes(query.toLowerCase());
     const matchesFrom = !effectiveDateFrom || Boolean(document.date && document.date >= effectiveDateFrom);
     const matchesTo = !effectiveDateTo || Boolean(document.date && document.date <= effectiveDateTo);
-    return matchesManagerTab && matchesPlant && matchesProject && matchesCategory && matchesManager && matchesIdentifier && matchesQuery && matchesFrom && matchesTo;
-  }), [category, effectiveDateFrom, effectiveDateTo, identifier, manager, managerDocumentTab, plantId, projectId, query, serverDocuments, user.id, user.role]);
+    const matchesLocked = !lockedOnly || document.accessLocked;
+    return matchesManagerTab && matchesPlant && matchesProject && matchesCategory && matchesStatus && matchesManager && matchesIdentifier && matchesQuery && matchesFrom && matchesTo && matchesLocked;
+  }), [category, effectiveDateFrom, effectiveDateTo, identifier, lockedOnly, manager, managerDocumentTab, plantId, projectId, query, selectedStatuses, serverDocuments, user.id, user.role]);
 
   const availableProjects = projects.filter((project) => !plantId || project.plantId === plantId);
   const categories = Array.from(new Set(documents.map((document) => document.category))).sort((a, b) => a.localeCompare(b));
