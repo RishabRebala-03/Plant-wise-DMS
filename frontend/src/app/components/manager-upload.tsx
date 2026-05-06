@@ -7,6 +7,8 @@ import { getDocumentTimestamp } from "../lib/datetime";
 import type { DocumentRecord, GovernancePolicy, ManagerDashboardData, Plant } from "../lib/types";
 import type { ProjectRecord } from "../lib/portal";
 import { DocumentDrawer } from "./document-drawer";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { ValueHelp } from "./ui/value-help";
 
 function scopedPlantIds(user: { assignedPlantIds?: string[]; plantId?: string | null }) {
   return user.assignedPlantIds?.length ? user.assignedPlantIds : user.plantId ? [user.plantId] : [];
@@ -83,6 +85,11 @@ export function ManagerUpload() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const [file, setFile] = useState<File | null>(null);
+  const [activeTab, setActiveTab] = useState("upload");
+  const [recentUploadQuery, setRecentUploadQuery] = useState("");
+  const [recentUploadPlantFilter, setRecentUploadPlantFilter] = useState("");
+  const [recentUploadCategoryFilter, setRecentUploadCategoryFilter] = useState("");
+  const [recentUploadSort, setRecentUploadSort] = useState("uploaded-desc");
   const [governancePolicy, setGovernancePolicy] = useState<GovernancePolicy>({
     allowedUploadFormats: ["pdf", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"],
     businessHours: {
@@ -156,6 +163,51 @@ export function ManagerUpload() {
     () => projects.filter((project) => !form.plant || project.plantId === form.plant),
     [form.plant, projects],
   );
+  const recentUploadPlants = useMemo(
+    () => Array.from(new Set((data?.recentUploads || []).map((document) => document.plant).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data?.recentUploads],
+  );
+  const recentUploadQueryOptions = useMemo(() => {
+    const registry = new Map<string, { value: string; label: string; meta: string }>();
+    (data?.recentUploads || []).forEach((document) => {
+      if (document.name) registry.set(document.name, { value: document.name, label: document.name, meta: `${document.plant} • Document` });
+      if (document.plant) registry.set(document.plant, { value: document.plant, label: document.plant, meta: "Plant" });
+      if (document.category) registry.set(document.category, { value: document.category, label: document.category, meta: "Category" });
+      if (document.uploadedBy) registry.set(document.uploadedBy, { value: document.uploadedBy, label: document.uploadedBy, meta: "Uploader" });
+    });
+    return Array.from(registry.values());
+  }, [data?.recentUploads]);
+  const recentUploadCategories = useMemo(
+    () => Array.from(new Set((data?.recentUploads || []).map((document) => document.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data?.recentUploads],
+  );
+  const filteredRecentUploads = useMemo(() => {
+    const query = recentUploadQuery.trim().toLowerCase();
+    const scopedUploads = (data?.recentUploads || []).filter((document) => {
+      const matchesQuery = !query || [document.name, document.plant, document.category, document.uploadedBy]
+        .some((value) => (value || "").toLowerCase().includes(query));
+      const matchesPlant = !recentUploadPlantFilter || document.plant === recentUploadPlantFilter;
+      const matchesCategory = !recentUploadCategoryFilter || document.category === recentUploadCategoryFilter;
+      return matchesQuery && matchesPlant && matchesCategory;
+    });
+    return [...scopedUploads].sort((left, right) => {
+      switch (recentUploadSort) {
+        case "uploaded-asc":
+          return (left.uploadedAt || left.date || "").localeCompare(right.uploadedAt || right.date || "");
+        case "name-asc":
+          return left.name.localeCompare(right.name);
+        case "name-desc":
+          return right.name.localeCompare(left.name);
+        case "plant-asc":
+          return (left.plant || "").localeCompare(right.plant || "");
+        case "plant-desc":
+          return (right.plant || "").localeCompare(left.plant || "");
+        case "uploaded-desc":
+        default:
+          return (right.uploadedAt || right.date || "").localeCompare(left.uploadedAt || left.date || "");
+      }
+    });
+  }, [data?.recentUploads, recentUploadCategoryFilter, recentUploadPlantFilter, recentUploadQuery, recentUploadSort]);
 
   function handleSelectedFile(nextFile: File | null) {
     if (!uploadAllowedNow) {
@@ -330,8 +382,14 @@ export function ManagerUpload() {
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full max-w-[420px] grid-cols-2 rounded-2xl border border-slate-200 bg-slate-100/90 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+          <TabsTrigger value="upload" className="rounded-xl text-sm font-semibold text-slate-600 transition data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_24px_rgba(15,23,42,0.18)]">Upload document</TabsTrigger>
+          <TabsTrigger value="recent" className="rounded-xl text-sm font-semibold text-slate-600 transition data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_24px_rgba(15,23,42,0.18)]">Recent uploads</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="upload" className="mt-0">
+          <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Document submission</h2>
@@ -506,12 +564,59 @@ export function ManagerUpload() {
               ) : null}
             </div>
           </form>
-        </section>
+          </section>
+        </TabsContent>
 
-        <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+        <TabsContent value="recent" className="mt-0">
+          <section className="min-w-0 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Recent uploads in your scope</h2>
             <p className="mt-1 text-sm text-slate-500">Only documents tied to your assigned plants are listed here.</p>
+          </div>
+          <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ValueHelp
+              label="Search"
+              placeholder="Document, plant, category, uploader"
+              emptyLabel="No matching recent-upload filters."
+              options={recentUploadQueryOptions}
+              value={recentUploadQuery}
+              onChange={setRecentUploadQuery}
+              containerClassName="w-full"
+            />
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Plant</span>
+              <select value={recentUploadPlantFilter} onChange={(event) => setRecentUploadPlantFilter(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                <option value="">All plants</option>
+                {recentUploadPlants.map((plant) => (
+                  <option key={plant} value={plant}>{plant}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Category</span>
+              <select value={recentUploadCategoryFilter} onChange={(event) => setRecentUploadCategoryFilter(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                <option value="">All categories</option>
+                {recentUploadCategories.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end gap-3">
+              <label className="w-full space-y-2 text-sm">
+                <span className="font-medium text-slate-700">Sort by</span>
+                <select value={recentUploadSort} onChange={(event) => setRecentUploadSort(event.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500">
+                  <option value="uploaded-desc">Latest first</option>
+                  <option value="uploaded-asc">Oldest first</option>
+                  <option value="name-asc">Document A-Z</option>
+                  <option value="name-desc">Document Z-A</option>
+                  <option value="plant-asc">Plant A-Z</option>
+                  <option value="plant-desc">Plant Z-A</option>
+                </select>
+              </label>
+              <button type="button" onClick={() => { setRecentUploadQuery(""); setRecentUploadPlantFilter(""); setRecentUploadCategoryFilter(""); setRecentUploadSort("uploaded-desc"); }} className="h-11 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                Clear
+              </button>
+            </div>
           </div>
           <div className="data-table-panel">
             <div className="data-table-scroll">
@@ -522,17 +627,19 @@ export function ManagerUpload() {
                     <th>Plant</th>
                     <th>Category</th>
                     <th>Uploaded</th>
+                    <th>Uploaded by</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.recentUploads.length ? (
-                    data.recentUploads.map((document) => (
+                  {filteredRecentUploads.length ? (
+                    filteredRecentUploads.map((document) => (
                       <tr key={document.id}>
                         <td className="text-strong">{document.name}</td>
                         <td>{document.plant}</td>
                         <td>{document.category}</td>
                         <td>{getDocumentTimestamp(document)}</td>
+                        <td>{document.uploadedBy}</td>
                         <td>
                           <button onClick={() => void openDocument(document)} className="text-[#0A6ED1] hover:underline">
                             Open
@@ -541,14 +648,15 @@ export function ManagerUpload() {
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={5}>No recent uploads are available for your assigned scope yet.</td></tr>
+                    <tr><td colSpan={6}>No recent uploads matched the current filters.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-        </section>
-      </div>
+          </section>
+        </TabsContent>
+      </Tabs>
 
       {selectedDoc ? <DocumentDrawer doc={selectedDoc} onClose={() => setSelectedDoc(null)} /> : null}
     </div>

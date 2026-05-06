@@ -129,8 +129,6 @@ def list_users():
         if "$gte" in date_query and "$lte" in date_query and date_query["$gte"] > date_query["$lte"]:
             return error_response("dateFrom cannot be later than dateTo", 400)
         query[date_key] = date_query
-    if actor["role"] == "CEO":
-        query["role"] = "Mining Manager"
     users = [serialize_user(user) for user in db.users.find(query).sort("name", 1)]
     return success_response(users)
 
@@ -145,7 +143,7 @@ def get_user(user_id: str):
         return error_response("User not found", 404)
     actor = _current_user()
     allowed, message = _can_manage_user(actor, user)
-    if not allowed:
+    if not allowed and actor["role"] != "CEO":
         return error_response(message or "Forbidden", 403)
     return success_response(serialize_user(user))
 

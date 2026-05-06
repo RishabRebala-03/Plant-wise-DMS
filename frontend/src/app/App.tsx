@@ -432,6 +432,12 @@ function emptyNotifications() {
   return { items: [] as NotificationItem[], unreadCount: 0 };
 }
 
+function mergeUsersWithCurrentUser(users: User[], currentUser: User) {
+  const registry = new Map(users.map((candidate) => [candidate.id, candidate]));
+  registry.set(currentUser.id, { ...registry.get(currentUser.id), ...currentUser });
+  return Array.from(registry.values()).sort((left, right) => compareText(left.name, right.name));
+}
+
 function PortalProvider({ user, children }: { user: User; children: ReactNode }) {
   const [plants, setPlants] = useState<Plant[]>([]);
   const [rawDocuments, setRawDocuments] = useState<DocumentRecord[]>([]);
@@ -452,7 +458,7 @@ function PortalProvider({ user, children }: { user: User; children: ReactNode })
 
     setRawDocuments(documentsResult.items);
     setPlants(plantsResult.items);
-    setUsers(usersResult);
+    setUsers(mergeUsersWithCurrentUser(usersResult, user));
     setNotifications(notificationsResult.items);
     setPortalState((current) => {
       const next = readPortalState(plantsResult.items, documentsResult.items);
@@ -1193,17 +1199,9 @@ function CeoDashboardPage() {
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Active Plants" value={plants.length} hint="Plants contributing to the current executive view." icon={Building2} tone="amber" onClick={() => navigate("/plants")} />
-        <MetricCard label="Projects" value={projects.length} hint="Derived plus locally created project workspaces." icon={FolderKanban} tone="blue" onClick={() => navigate("/plants")} />
-        <MetricCard label="Documents" value={documents.length} hint="All indexed records across the enterprise scope." icon={FileText} tone="amber" onClick={() => navigate("/documents")} />
-        <MetricCard label="Mining Managers" value={miningManagers} hint="Managers currently configured in the system." icon={Users} tone="rose" onClick={() => navigate("/oversight")} />
-        <MetricCard label="Dormant Plants" value={stalledPlants.length} hint="Plants with no upload in the past 14 days." icon={TriangleAlert} tone="rose" onClick={() => navigate("/analytics")} />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.9fr)]">
         <SectionCard title="Plant-wise document volume" subtitle="Top plants by document count with project spread">
-          <div className="h-80">
+          <div className="h-[26rem]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={lineSeries}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -1236,7 +1234,7 @@ function CeoDashboardPage() {
         </SectionCard>
 
         <SectionCard title="Document portfolio" subtitle="Category-level distribution">
-          <div className="h-80">
+          <div className="h-[26rem]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -1265,7 +1263,7 @@ function CeoDashboardPage() {
                 key={item.name}
                 type="button"
                 onClick={() => navigate(`/documents?category=${encodeURIComponent(item.name)}`)}
-                className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
+                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-100"
               >
                 <span>{item.name}</span>
                 <span className="font-semibold text-slate-900">{item.value}</span>
@@ -1323,7 +1321,7 @@ function CeoDashboardPage() {
                 {(stalledPlants.length ? stalledPlants : plants.slice(0, 3)).map((plant) => (
                   <tr key={plant.id}>
                     <td className="text-strong">{plant.name}</td>
-                    <td>{formatDate(plant.lastUpload)}</td>
+                    <td>{formatDateTime(plant.lastUpload)}</td>
                     <td><Link to={`/plants/${plant.id}`} className="font-semibold text-[#0A6ED1] hover:underline">Open</Link></td>
                   </tr>
                 ))}
@@ -1348,7 +1346,7 @@ function CeoDashboardPage() {
                   {latestDocument.plant} • {latestDocument.category}
                 </div>
                 <div className="mt-3 text-sm text-slate-700">
-                  Uploaded by {latestDocument.uploadedBy} on {formatDate(latestDocument.date)}.
+                  Uploaded by {latestDocument.uploadedBy} on {formatDateTime(latestDocument.uploadedAt || latestDocument.date)}.
                 </div>
                 <div className="mt-2 text-sm text-slate-700">
                   Project: {latestDocument.projectName || "No project assigned"}.
@@ -1379,14 +1377,14 @@ function CeoDashboardPage() {
           <div className="space-y-3">
             {stalledPlants.map((plant) => {
               const reason = plant.lastUpload
-                ? `Last upload was ${formatDate(plant.lastUpload)}, which is older than 14 days.`
+                ? `Last upload was ${formatDateTime(plant.lastUpload)}, which is older than 14 days.`
                 : "No uploads have been recorded for this plant yet.";
               return (
                 <div key={plant.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="font-semibold text-slate-900">{plant.name}</div>
-                      <div className="mt-1 text-sm text-slate-500">Last upload: {formatDate(plant.lastUpload)}</div>
+                      <div className="mt-1 text-sm text-slate-500">Last upload: {formatDateTime(plant.lastUpload)}</div>
                       <div className="mt-3 text-sm text-slate-700">{reason}</div>
                     </div>
                     <button type="button" onClick={() => navigate(`/plants/${plant.id}`)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
@@ -1453,13 +1451,6 @@ function ManagerDashboardPage() {
           </div>
         </div>
       </section>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="My Projects" value={myProjects.length} hint="Project spaces under your plant." icon={FolderKanban} onClick={() => navigate("/plants")} />
-        <MetricCard label="My Documents" value={myDocuments.length} hint="Documents visible inside your plant scope." icon={FileText} tone="blue" onClick={() => navigate("/documents")} />
-        <MetricCard label="Locked After Access" value={lockedDocuments.length} hint="Read-only items opened in this manager session." icon={Lock} tone="rose" onClick={() => navigate("/documents")} />
-        <MetricCard label="Upload Rights" value={can("canUploadDocuments") ? "Enabled" : "Disabled"} hint="Managers can upload only when the live access rule permits it." icon={Upload} tone="amber" onClick={can("canUploadDocuments") ? () => navigate("/upload") : undefined} />
-      </div>
 
       <div className="grid gap-6">
         <div className="data-table-panel">
@@ -1563,7 +1554,7 @@ function ManagerDashboardPage() {
                   <div>
                     <div className="font-semibold text-slate-900">{document.name}</div>
                     <div className="mt-1 text-sm text-slate-500">{document.category} • {document.projectName || "No project"}</div>
-                    <div className="mt-3 text-sm text-slate-700">Uploaded by {document.uploadedBy} on {formatDate(document.date)}.</div>
+                    <div className="mt-3 text-sm text-slate-700">Uploaded by {document.uploadedBy} on {formatDateTime(document.uploadedAt || document.date)}.</div>
                   </div>
                   <div className="text-xs uppercase tracking-[0.16em] text-slate-400">{document.status}</div>
                 </div>
@@ -1587,7 +1578,7 @@ function ManagerDashboardPage() {
               <button key={document.id} type="button" onClick={() => setSelectedHeroDocument(document)} className="w-full rounded-3xl border border-rose-200 bg-rose-50 p-4 text-left transition hover:border-rose-300 hover:bg-rose-100">
                 <div className="font-semibold text-slate-900">{document.name}</div>
                 <div className="mt-1 text-sm text-slate-500">{document.plant} • {document.category}</div>
-                <div className="mt-3 text-sm text-slate-700">Locked after access. Uploaded by {document.uploadedBy} on {formatDate(document.date)}.</div>
+                <div className="mt-3 text-sm text-slate-700">Locked after access. Uploaded by {document.uploadedBy} on {formatDateTime(document.uploadedAt || document.date)}.</div>
               </button>
             ))}
           </div>
@@ -1762,20 +1753,15 @@ function PlantIndexPage() {
           <ExportActions fileBaseName="plants" filteredRows={filteredPlantExportRows} allRows={allPlantExportRows} />
         </div>
         <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-4 md:grid-cols-2 xl:grid-cols-6">
-          <div className="w-full">
-            <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Plant search
-            </div>
-            <div className="relative">
-              <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={plantQuery}
-                onChange={(event) => setPlantQuery(event.target.value)}
-                placeholder="Search by plant, code, manager, company, or address"
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-              />
-            </div>
-          </div>
+          <ValueHelp
+            label="Plant search"
+            placeholder="Search by plant, code, manager, company, or address"
+            emptyLabel="No matching plants."
+            options={plantQueryOptions}
+            value={plantQuery}
+            onChange={setPlantQuery}
+            containerClassName="w-full"
+          />
           <ValueHelp
             label="Suggestions"
             placeholder="Suggested plants"
@@ -1876,7 +1862,7 @@ function PlantIndexPage() {
                   <td>{projectCount}</td>
                   <td>{docCount}</td>
                   <td>{activityBand}</td>
-                  <td>{formatDate(plant.lastUpload)}</td>
+                  <td>{formatDateTime(plant.lastUpload)}</td>
                   <td>{plant.manager || "Unassigned"}</td>
                   <td>
                     <Link to={`/plants/${plant.id}`} className="font-semibold text-[#0A6ED1] hover:underline">
@@ -1937,7 +1923,7 @@ function PlantProjectsPage() {
                 <td>{plantDocuments.length}</td>
                 <td>{plant.manager || "Unassigned"}</td>
                 <td>{plant.company || "-"}</td>
-                <td>{formatDate(plant.lastUpload)}</td>
+                <td>{formatDateTime(plant.lastUpload)}</td>
               </tr>
             </tbody>
           </table>
@@ -2674,7 +2660,7 @@ function DocumentsWorkspace({ scopedProjectId, scopedPlantId }: { scopedProjectI
                   <td className="px-4 py-4 text-slate-600">{document.projectName}</td>
                   <td className="px-4 py-4 text-slate-600">{document.managerName}</td>
                   <td className="px-4 py-4 font-mono text-xs text-slate-600">{document.identifier}</td>
-                  <td className="px-4 py-4 text-slate-600">{formatDate(document.date)}</td>
+                  <td className="px-4 py-4 text-slate-600">{formatDateTime(document.uploadedAt || document.date)}</td>
                 </tr>
               ))}
               {!sortedDocuments.length ? (
@@ -3537,7 +3523,7 @@ function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-6">
         <SectionCard title="Plant document density" subtitle="Bar chart comparing documents, projects, and average depth">
           <div className="h-[26rem] rounded-3xl transition hover:bg-slate-50">
             <ResponsiveContainer width="100%" height="100%">
@@ -3616,7 +3602,7 @@ function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-6">
         <SectionCard title="Plant performance radar" subtitle="Multi-axis comparison across top plants">
           <button type="button" onClick={() => navigate("/plants")} className="block h-[26rem] w-full rounded-3xl transition hover:bg-slate-50">
             <ResponsiveContainer width="100%" height="100%">
@@ -3671,7 +3657,7 @@ function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid gap-6">
         <SectionCard title="Recent document rhythm" subtitle="The documents most recently shaping executive attention">
           <div className="space-y-3">
             {recentDocuments.map((document, index) => (
@@ -3696,7 +3682,7 @@ function AnalyticsPage() {
         </SectionCard>
 
         <SectionCard title="Trust watchlist" subtitle="Signals that could erode confidence if left unattended">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <button type="button" onClick={() => navigate("/activity-logs")} className="rounded-3xl bg-slate-50 p-4 text-left transition hover:bg-slate-100">
               <div className="text-sm font-semibold text-slate-900">Network reviews</div>
               <div className="mt-2 text-sm text-slate-600">{reviewRules} IP rule entries still need a decision.</div>
@@ -3719,7 +3705,7 @@ function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-6">
         <SectionCard title="Top uploaders" subtitle="People driving document movement">
           <div className="space-y-3">
             {uploaderRanking.map((item, index) => (
@@ -3740,7 +3726,7 @@ function AnalyticsPage() {
         </SectionCard>
 
         <SectionCard title="Executive observations" subtitle="Quick reads from the expanded analytics workspace">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <button type="button" onClick={() => navigate("/plants")} className="rounded-3xl bg-slate-50 p-4 text-left transition hover:bg-slate-100">
               <div className="text-sm font-semibold text-slate-900">Plant concentration</div>
               <div className="mt-2 text-sm text-slate-600">
@@ -3876,7 +3862,7 @@ function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Users" value={users.length} hint="Registered user accounts in the system." icon={Users} onClick={can("canManageUsers") ? () => navigate("/admin/users") : undefined} />
         <MetricCard label="Plants" value={plants.length} hint="Plants covered by governance and audit policies." icon={Building2} tone="blue" onClick={() => navigate("/admin/access")} />
-        <MetricCard label="Documents" value={documents.length} hint="Records available to govern and audit." icon={FileText} tone="amber" onClick={() => navigate("/admin/activity-logs")} />
+        <MetricCard label="Documents" value={documents.length} hint="Records available to govern and audit." icon={FileText} tone="amber" onClick={() => navigate("/documents")} />
         <MetricCard label="IP Rules" value={portalState.ipRules.length} hint="Allow, block, and review network entries." icon={Network} tone="rose" onClick={can("canConfigureIp") ? () => navigate("/admin/network") : undefined} />
       </div>
 
@@ -3998,14 +3984,6 @@ function AdminDashboardPage() {
             </button>
           </div>
         </SectionCard>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {can("canManageUsers") ? <AdminTile title="Manager oversight" body="Edit, remove, or inactivate manager accounts." to="/admin/users" icon={UserCog} /> : null}
-        {can("canManageUsers") ? <AdminTile title="Master data" body="Create users, plants, projects, and govern documents from one admin workspace." to="/admin/master-data" icon={Database} /> : null}
-        <AdminTile title="Access control" body="Adjust frontend role visibility and privileged actions." to="/admin/access" icon={ShieldCheck} />
-        {can("canConfigureIp") ? <AdminTile title="IP configuration" body="Maintain allowed, blocked, and review network addresses." to="/admin/network" icon={Globe} /> : null}
-        <AdminTile title="Session policies" body="Configure auto logout and concurrent session handling." to="/admin/sessions" icon={Clock3} />
       </div>
 
       <HeroInsightDialog
@@ -4782,7 +4760,6 @@ function AdminMasterDataPage() {
 
       <SectionCard
         title="Master data workspace"
-        subtitle="Switch directly to the table you need instead of scanning through every registry"
         action={(
           <Tabs value={activeMasterTab} onValueChange={setActiveMasterTab} className="w-full">
             <TabsList className="grid w-full max-w-[760px] grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1 md:grid-cols-5">
@@ -5323,7 +5300,7 @@ function AdminMasterDataPage() {
                   <td className="px-4 py-4 text-slate-600">{document.plant}</td>
                   <td className="px-4 py-4 text-slate-600">{document.projectName || "-"}</td>
                   <td className="px-4 py-4 text-slate-600">{document.uploadedBy}</td>
-                  <td className="px-4 py-4 text-slate-600">{formatDate(document.date)}</td>
+                  <td className="px-4 py-4 text-slate-600">{formatDateTime(document.uploadedAt || document.date)}</td>
                   <td className="px-4 py-4">
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => void openDocumentEditor(document)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50">
@@ -5363,6 +5340,7 @@ function AdminMasterDataPage() {
 function ManagerOversightPage() {
   const { user, users, plants, refreshData } = usePortal();
   const [managerFilter, setManagerFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [plantFilter, setPlantFilter] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -5379,9 +5357,10 @@ function ManagerOversightPage() {
   const navigate = useNavigate();
   const [draft, setDraft] = useState({ name: "", email: "", assignedPlantIds: [] as string[] });
 
+  const directoryUsers = useMemo(() => users, [users]);
   const managers = useMemo(
-    () => users.filter((candidate) => candidate.role === "Mining Manager"),
-    [users],
+    () => directoryUsers.filter((candidate) => candidate.role === "Mining Manager"),
+    [directoryUsers],
   );
   const managersWithPlants = useMemo(
     () => managers.filter((candidate) => (candidate.assignedPlantIds?.length || 0) > 0 || Boolean(candidate.plantId)).length,
@@ -5393,20 +5372,22 @@ function ManagerOversightPage() {
   );
 
   const managerOptions = useMemo(
-    () => managers.map((candidate) => candidate.name).sort((a, b) => a.localeCompare(b)).map((candidate) => ({ value: candidate, label: candidate, meta: "Manager" })),
-    [managers],
+    () => directoryUsers.map((candidate) => candidate.name).sort((a, b) => a.localeCompare(b)).map((candidate) => ({ value: candidate, label: candidate, meta: "User" })),
+    [directoryUsers],
   );
+  const roleOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => formatRole(candidate.role)), "Role"), [directoryUsers]);
   const managerPlantOptions = useMemo(
     () => plants.map((plant) => ({ value: plant.id, label: plant.name, meta: "Plant" })),
     [plants],
   );
-  const emailOptions = useMemo(() => buildValueHelpOptions(managers.map((candidate) => candidate.email), "Email"), [managers]);
-  const statusOptions = useMemo(() => buildValueHelpOptions(managers.map((candidate) => candidate.status), "Status"), [managers]);
+  const emailOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => candidate.email), "Email"), [directoryUsers]);
+  const statusOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => candidate.status), "Status"), [directoryUsers]);
   const scopeOptions = useMemo(
     () => [
       { value: "unassigned", label: "Unassigned", meta: "Plant scope" },
       { value: "single", label: "Single plant", meta: "Plant scope" },
       { value: "multi", label: "Multi plant", meta: "Plant scope" },
+      { value: "global", label: "Global", meta: "Plant scope" },
     ],
     [],
   );
@@ -5422,17 +5403,20 @@ function ManagerOversightPage() {
 
   const filtered = useMemo(
     () =>
-      managers.filter((candidate) => {
+      directoryUsers.filter((candidate) => {
         const assignedIds = candidate.assignedPlantIds || (candidate.plantId ? [candidate.plantId] : []);
-        const scope = assignedIds.length > 1 ? "multi" : assignedIds.length === 1 ? "single" : "unassigned";
+        const scope = candidate.role === "Admin" || candidate.role === "CEO"
+          ? "global"
+          : assignedIds.length > 1 ? "multi" : assignedIds.length === 1 ? "single" : "unassigned";
         const matchesManager = matchesValueHelpFilter(managerFilter, candidate.name);
+        const matchesRole = matchesValueHelpFilter(roleFilter, formatRole(candidate.role));
         const matchesPlant = !plantFilter || assignedIds.includes(plantFilter);
         const matchesEmail = matchesValueHelpFilter(emailFilter, candidate.email);
         const matchesStatus = matchesValueHelpFilter(statusFilter, candidate.status);
         const matchesScope = matchesValueHelpFilter(scopeFilter, scope);
-        return matchesManager && matchesPlant && matchesEmail && matchesStatus && matchesScope;
+        return matchesManager && matchesRole && matchesPlant && matchesEmail && matchesStatus && matchesScope;
       }),
-    [emailFilter, managerFilter, managers, plantFilter, scopeFilter, statusFilter],
+    [directoryUsers, emailFilter, managerFilter, plantFilter, roleFilter, scopeFilter, statusFilter],
   );
   const sortedManagers = useMemo(() => {
     const next = [...filtered];
@@ -5453,6 +5437,10 @@ function ManagerOversightPage() {
     });
     return next;
   }, [filtered, managerSort]);
+
+  function canManageCandidate(candidate: User) {
+    return user.role === "Admin" || candidate.role === "Mining Manager";
+  }
 
   function openEditor(target: User) {
     setEditor(target);
@@ -5565,23 +5553,33 @@ function ManagerOversightPage() {
     <div className="space-y-6">
       <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users" }] : [{ label: "Users" }]} />
       <SectionCard
-        title="Manager oversight"
-        subtitle={user.role === "Admin" ? "Admin can update, remove, and inactivate manager accounts." : "CEO can review, edit, remove, and revoke access for mining managers."}
+        title="User directory"
+        subtitle={user.role === "Admin" ? "Admin can review all users and manage role access across the platform." : "CEO can review all users, with management actions reserved for mining manager accounts."}
       >
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard label="Managers" value={managers.length} hint="Mining manager accounts in the system." icon={Users} tone="blue" />
           <MetricCard label="Managers with plants" value={managersWithPlants} hint={`${managersWithoutPlants} manager${managersWithoutPlants === 1 ? "" : "s"} still need a plant assignment.`} icon={Building2} />
-          <MetricCard label="All user accounts" value={users.length} hint="Includes Admin, CEO, and Mining Manager accounts." icon={ShieldCheck} />
+          <MetricCard label="All user accounts" value={directoryUsers.length} hint="Includes Admin, CEO, and Mining Manager accounts." icon={ShieldCheck} />
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           <ValueHelp
-            label="Manager"
-            placeholder="All managers"
-            emptyLabel="No matching managers."
+            label="User"
+            placeholder="All users"
+            emptyLabel="No matching users."
             options={managerOptions}
             value={managerFilter}
             onChange={setManagerFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
+          <ValueHelp
+            label="Role"
+            placeholder="All roles"
+            emptyLabel="No matching roles."
+            options={roleOptions}
+            value={roleFilter}
+            onChange={setRoleFilter}
             containerClassName="w-full"
             triggerClassName="h-12"
           />
@@ -5644,6 +5642,7 @@ function ManagerOversightPage() {
               type="button"
               onClick={() => {
                 setManagerFilter("");
+                setRoleFilter("");
                 setPlantFilter("");
                 setEmailFilter("");
                 setStatusFilter("");
@@ -5659,75 +5658,105 @@ function ManagerOversightPage() {
         {message ? <div className="mt-4 text-sm text-emerald-700">{message}</div> : null}
         {error ? <div className="mt-2 text-sm text-[#BB0000]">{error}</div> : null}
 
-        <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200">
+        <div className="mt-6 overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
           <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-sm text-slate-500">
-                <th className="px-4 py-3 font-medium">Manager</th>
-                <th className="px-4 py-3 font-medium">Email</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Scope</th>
-                <th className="px-4 py-3 font-medium">Plants</th>
-                <th className="px-4 py-3 font-medium">Actions</th>
+            <thead className="bg-slate-50/90">
+              <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
+                <th className="px-5 py-4 font-semibold">User</th>
+                <th className="px-4 py-4 font-semibold">Role</th>
+                <th className="px-4 py-4 font-semibold">Email</th>
+                <th className="px-4 py-4 font-semibold">Status</th>
+                <th className="px-4 py-4 font-semibold">Scope</th>
+                <th className="px-4 py-4 font-semibold">Plants</th>
+                <th className="px-5 py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white text-sm">
               {sortedManagers.map((candidate) => (
-                <tr key={candidate.id}>
-                  <td className="px-4 py-4 align-top">
+                <tr key={candidate.id} className="align-top transition hover:bg-slate-50/80">
+                  <td className="px-5 py-5">
                     <button
                       onClick={() => navigate(user.role === "Admin" ? `/admin/users/${candidate.id}` : `/oversight/${candidate.id}`)}
-                      className="block text-left font-semibold leading-5 text-slate-900 transition hover:text-[#0A6ED1]"
+                      className="block text-left transition hover:text-[#0A6ED1]"
                     >
-                      {candidate.name}
+                      <div className="font-semibold leading-5 text-slate-900">{candidate.name}</div>
+                      <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium tracking-[0.12em] text-slate-500">
+                        {candidate.id}
+                      </div>
                     </button>
-                    <div className="mt-1 break-all text-xs text-slate-500">{candidate.id}</div>
                   </td>
-                  <td className="px-4 py-4 text-slate-600">{candidate.email}</td>
-                  <td className="px-4 py-4 text-slate-600">{candidate.status}</td>
-                  <td className="px-4 py-4 text-slate-600">
-                    {(candidate.assignedPlantIds?.length || (candidate.plantId ? 1 : 0)) > 1
+                  <td className="px-4 py-5">
+                    <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {formatRole(candidate.role)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-5 text-slate-600">
+                    <div className="max-w-[240px] break-all leading-6">{candidate.email}</div>
+                  </td>
+                  <td className="px-4 py-5">
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      candidate.status === "Active"
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-rose-200 bg-rose-50 text-rose-700"
+                    }`}>
+                      {candidate.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-5">
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                      {candidate.role === "Admin" || candidate.role === "CEO"
+                      ? "Global"
+                      : (candidate.assignedPlantIds?.length || (candidate.plantId ? 1 : 0)) > 1
                       ? "Multi plant"
                       : (candidate.assignedPlantIds?.length || (candidate.plantId ? 1 : 0)) === 1
                         ? "Single plant"
                         : "Unassigned"}
+                    </span>
                   </td>
-                  <td className="px-4 py-4 text-slate-600">{candidate.assignedPlants?.join(", ") || candidate.plant || "All plants"}</td>
-                  <td className="px-4 py-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={() => openEditor(candidate)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => void toggleManager(candidate)}
-                        disabled={submitting === candidate.id}
-                        className="rounded-full border border-[#BBD4F6] bg-[#EAF3FC] px-3 py-1 text-xs font-medium text-[#0A6ED1] transition hover:bg-[#DDEEFF] disabled:opacity-60"
-                      >
-                        {candidate.status === "Active" ? "Mark inactive" : "Reactivate"}
-                      </button>
-                      {user.role === "Admin" || user.role === "CEO" ? (
+                  <td className="px-4 py-5 text-slate-600">
+                    <div className="max-w-[280px] leading-6">{candidate.assignedPlants?.join(", ") || candidate.plant || "All plants"}</div>
+                  </td>
+                  <td className="px-5 py-5">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {canManageCandidate(candidate) ? (
+                        <button onClick={() => openEditor(candidate)} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                          Edit
+                        </button>
+                      ) : null}
+                      {canManageCandidate(candidate) ? (
+                        <button
+                          onClick={() => void toggleManager(candidate)}
+                          disabled={submitting === candidate.id}
+                          className="rounded-full border border-[#BBD4F6] bg-[#EAF3FC] px-3.5 py-1.5 text-xs font-semibold text-[#0A6ED1] transition hover:bg-[#DDEEFF] disabled:opacity-60"
+                        >
+                          {candidate.status === "Active" ? "Mark inactive" : "Reactivate"}
+                        </button>
+                      ) : null}
+                      {(user.role === "Admin" || (user.role === "CEO" && candidate.role === "Mining Manager")) ? (
                         <button
                           onClick={() => openResetPasswordDialog(candidate)}
                           disabled={submitting === candidate.id}
-                          className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                          className="rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
                         >
                           Reset password
                         </button>
                       ) : null}
-                      <button
-                        onClick={() => void removeManager(candidate)}
-                        disabled={submitting === candidate.id}
-                        className="rounded-full border border-[#D9D9D9] bg-[#F5F6F7] px-3 py-1 text-xs font-medium text-[#354A5F] transition hover:bg-[#ECEFF1] disabled:opacity-60"
-                      >
-                        Remove
-                      </button>
+                      {canManageCandidate(candidate) ? (
+                        <button
+                          onClick={() => void removeManager(candidate)}
+                          disabled={submitting === candidate.id}
+                          className="rounded-full border border-[#D9D9D9] bg-[#F5F6F7] px-3.5 py-1.5 text-xs font-semibold text-[#354A5F] transition hover:bg-[#ECEFF1] disabled:opacity-60"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
               ))}
               {!sortedManagers.length ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">No managers matched the current search.</td>
+                  <td colSpan={7} className="px-4 py-14 text-center text-slate-500">No users matched the current filters.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -5737,8 +5766,8 @@ function ManagerOversightPage() {
         {editor ? (
           <div className="mt-6 grid gap-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 md:grid-cols-2">
             <div className="md:col-span-2">
-              <div className="text-lg font-semibold text-slate-900">Edit manager</div>
-              <div className="mt-1 text-sm text-slate-500">Update the manager record and plant assignment.</div>
+              <div className="text-lg font-semibold text-slate-900">Edit user</div>
+              <div className="mt-1 text-sm text-slate-500">Update the user record and plant assignment.</div>
             </div>
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-700">Name</span>
@@ -5850,7 +5879,7 @@ function ManagerDetailPage() {
   const { userId } = useParams();
   const { user, users, plants, documents } = usePortal();
   const navigate = useNavigate();
-  const target = users.find((candidate) => candidate.id === userId && candidate.role === "Mining Manager");
+  const target = users.find((candidate) => candidate.id === userId);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileDraft, setProfileDraft] = useState({
     name: "",
@@ -5867,13 +5896,14 @@ function ManagerDetailPage() {
   const [resettingPassword, setResettingPassword] = useState(false);
 
   if (!target) {
-    return <NotFoundCard title="Manager not found" body="The selected manager could not be located." />;
+    return <NotFoundCard title="User not found" body="The selected user could not be located." />;
   }
 
   const assignedIds = target.assignedPlantIds || (target.plantId ? [target.plantId] : []);
   const assignedPlantsList = plants.filter((plant) => assignedIds.includes(plant.id));
   const ownedDocuments = documents.filter((document) => document.uploadedById === target.id);
   const scopedDocuments = documents.filter((document) => assignedIds.includes(document.plantId));
+  const canManageTarget = user.role === "Admin" || target.role === "Mining Manager";
 
   useEffect(() => {
     setProfileDraft({
@@ -5934,25 +5964,56 @@ function ManagerDetailPage() {
   return (
     <div className="space-y-6">
       <Breadcrumbs items={user.role === "Admin" ? [{ label: "Admin", to: "/admin" }, { label: "Users", to: "/admin/users" }, { label: target.name }] : [{ label: "Users", to: "/oversight" }, { label: target.name }]} />
-      <SectionCard title={target.name} subtitle="Manager profile, assigned plants, and scoped activity">
+      <SectionCard title={target.name} subtitle="User profile, assigned plants, and scoped activity">
         <div className="grid gap-4 md:grid-cols-3">
           <MetricCard label="Assigned Plants" value={assignedPlantsList.length} hint="Plants this manager can access." icon={Building2} tone="blue" />
           <MetricCard label="Uploaded Documents" value={ownedDocuments.length} hint="Documents uploaded by this manager." icon={FileText} tone="amber" />
           <MetricCard label="Scoped Documents" value={scopedDocuments.length} hint="Documents visible inside this manager's assigned plant scope." icon={ShieldCheck} tone="teal" />
         </div>
-        <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-            <div className="text-lg font-semibold text-slate-900">Manager details</div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div><span className="font-semibold text-slate-900">Email:</span> {target.email}</div>
-              <div><span className="font-semibold text-slate-900">Role:</span> {target.role}</div>
-              <div><span className="font-semibold text-slate-900">Primary plant:</span> {target.plant || "All plants"}</div>
-              <div><span className="font-semibold text-slate-900">Updated:</span> {formatDate(target.updatedAt || null)}</div>
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="rounded-[30px] border border-slate-200 bg-[linear-gradient(180deg,_#ffffff,_#f8fafc)] p-6 shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">User details</div>
+                <div className="mt-1 text-sm text-slate-500">Identity, role posture, and administrative controls.</div>
+              </div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {formatRole(target.role)}
+              </div>
             </div>
-            {(user.role === "Admin" || user.role === "CEO") ? (
-              <div className="mt-6 space-y-3 rounded-3xl border border-amber-200 bg-white p-4">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Email</div>
+                <div className="mt-2 text-sm font-medium text-slate-800 break-all">{target.email}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Status</div>
+                <div className="mt-2">
+                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                    target.status === "Active"
+                      ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border border-rose-200 bg-rose-50 text-rose-700"
+                  }`}>
+                    {target.status}
+                  </span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Primary plant</div>
+                <div className="mt-2 text-sm font-medium text-slate-800">{target.plant || "All plants"}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Last updated</div>
+                <div className="mt-2 text-sm font-medium text-slate-800">{formatDate(target.updatedAt || null)}</div>
+              </div>
+            </div>
+            {canManageTarget ? (
+              <div className="mt-6 rounded-[28px] border border-amber-200 bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-slate-900">Profile management</div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Profile management</div>
+                    <div className="mt-1 text-xs text-slate-500">Edit identity fields and secure the account with a temporary password reset.</div>
+                  </div>
                   {!editingProfile ? (
                     <button
                       type="button"
@@ -5967,7 +6028,7 @@ function ManagerDetailPage() {
                   ) : null}
                 </div>
                 {editingProfile ? (
-                  <>
+                  <div className="mt-5 space-y-4">
                     <input
                       type="text"
                       value={profileDraft.name}
@@ -6017,7 +6078,7 @@ function ManagerDetailPage() {
                     </div>
                     <div className="space-y-2">
                       <div className="text-sm font-medium text-slate-700">Assigned plants</div>
-                      <div className="grid max-h-40 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="grid max-h-52 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         {plants.map((plant) => (
                           <label key={`detail-plant-${plant.id}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
                             <span>{plant.name}</span>
@@ -6070,84 +6131,109 @@ function ManagerDetailPage() {
                         Cancel
                       </button>
                     </div>
-                  </>
-                ) : null}
-                <div className="text-sm font-semibold text-slate-900">Reset temporary password</div>
-                <input
-                  type="password"
-                  value={resetPasswordDraft}
-                  onChange={(event) => {
-                    setResetPasswordDraft(event.target.value);
-                    setResetPasswordError("");
-                  }}
-                  placeholder="Temporary password"
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500"
-                />
-                <input
-                  type="password"
-                  value={resetPasswordConfirm}
-                  onChange={(event) => {
-                    setResetPasswordConfirm(event.target.value);
-                    setResetPasswordError("");
-                  }}
-                  placeholder="Confirm password"
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500"
-                />
-                {resetPasswordError ? (
-                  <div className={`text-sm ${resetPasswordError === "Password reset successfully." ? "text-emerald-700" : "text-rose-700"}`}>
-                    {resetPasswordError}
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => void handleResetPassword()}
-                  disabled={resettingPassword}
-                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                >
-                  {resettingPassword ? "Resetting..." : "Reset password"}
-                </button>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">Reset temporary password</div>
+                  <div className="mt-1 text-xs text-slate-500">Issue a temporary credential for the next secure login.</div>
+                  <div className="mt-4 grid gap-3">
+                    <input
+                      type="password"
+                      value={resetPasswordDraft}
+                      onChange={(event) => {
+                        setResetPasswordDraft(event.target.value);
+                        setResetPasswordError("");
+                      }}
+                      placeholder="Temporary password"
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500"
+                    />
+                    <input
+                      type="password"
+                      value={resetPasswordConfirm}
+                      onChange={(event) => {
+                        setResetPasswordConfirm(event.target.value);
+                        setResetPasswordError("");
+                      }}
+                      placeholder="Confirm password"
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500"
+                    />
+                    {resetPasswordError ? (
+                      <div className={`text-sm ${resetPasswordError === "Password reset successfully." ? "text-emerald-700" : "text-rose-700"}`}>
+                        {resetPasswordError}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void handleResetPassword()}
+                      disabled={resettingPassword}
+                      className="w-fit rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                    >
+                      {resettingPassword ? "Resetting..." : "Reset password"}
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>
-          <div className="rounded-[28px] border border-slate-200 bg-white p-5">
-            <div className="text-lg font-semibold text-slate-900">Assigned plants</div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">Assigned plants</div>
+                <div className="mt-1 text-sm text-slate-500">Operational sites currently inside this user’s scope.</div>
+              </div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                {assignedPlantsList.length} plant{assignedPlantsList.length === 1 ? "" : "s"}
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
               {assignedPlantsList.map((plant) => (
-                <div key={plant.id} className="rounded-3xl bg-slate-50 p-4">
+                <div key={plant.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                   <div className="font-semibold text-slate-900">{plant.name}</div>
                   <div className="mt-1 text-sm text-slate-500">{plant.location || plant.company || "Assigned plant workspace"}</div>
+                  <div className="mt-3 inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                    {plant.status || "Operational"}
+                  </div>
                 </div>
               ))}
-              {!assignedPlantsList.length ? <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-500">No plants assigned.</div> : null}
+              {!assignedPlantsList.length ? <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">No plants assigned.</div> : null}
             </div>
           </div>
         </div>
-        <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5">
-          <div className="text-lg font-semibold text-slate-900">Documents inside assigned scope</div>
-          <div className="mt-4 overflow-hidden rounded-[22px] border border-slate-200">
+        <div className="mt-6 rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="text-lg font-semibold text-slate-900">Documents inside assigned scope</div>
+              <div className="mt-1 text-sm text-slate-500">Latest records the user can currently access across assigned plants.</div>
+            </div>
+            <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              {scopedDocuments.length} visible
+            </div>
+          </div>
+          <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
-                <tr className="text-left text-sm text-slate-500">
-                  <th className="px-4 py-3 font-medium">Document</th>
-                  <th className="px-4 py-3 font-medium">Plant</th>
-                  <th className="px-4 py-3 font-medium">Project</th>
-                  <th className="px-4 py-3 font-medium">Uploaded</th>
+                <tr className="text-left text-xs uppercase tracking-[0.16em] text-slate-500">
+                  <th className="px-5 py-4 font-semibold">Document</th>
+                  <th className="px-4 py-4 font-semibold">Plant</th>
+                  <th className="px-4 py-4 font-semibold">Project</th>
+                  <th className="px-5 py-4 font-semibold">Uploaded</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-sm">
                 {scopedDocuments.slice(0, 8).map((document) => (
-                  <tr key={document.id}>
-                    <td className="px-4 py-4">
+                  <tr key={document.id} className="transition hover:bg-slate-50/80">
+                    <td className="px-5 py-4">
                       <button
                         onClick={() => navigate(`/documents/${document.id}`)}
-                        className="font-medium text-slate-900 transition hover:text-[#0A6ED1]"
+                        className="text-left transition hover:text-[#0A6ED1]"
                       >
-                        {document.name}
+                        <div className="font-medium text-slate-900">{document.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">{document.category}</div>
                       </button>
                     </td>
                     <td className="px-4 py-4 text-slate-600">{document.plant}</td>
                     <td className="px-4 py-4 text-slate-600">{document.projectName || "-"}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatDate(document.date)}</td>
+                    <td className="px-5 py-4 text-slate-600">{formatDateTime(document.uploadedAt || document.date)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -6164,6 +6250,7 @@ function AdminAccessPage() {
   const [savingManagerId, setSavingManagerId] = useState<string | null>(null);
   const [savingRules, setSavingRules] = useState(false);
   const [rulesMessage, setRulesMessage] = useState("");
+  const [activeAccessTab, setActiveAccessTab] = useState("role-permissions");
   const [roleFilter, setRoleFilter] = useState("");
   const [roleCapabilityFilter, setRoleCapabilityFilter] = useState("");
   const [roleUploadFilter, setRoleUploadFilter] = useState("");
@@ -6176,7 +6263,7 @@ function AdminAccessPage() {
   const [managerAssignmentHealthFilter, setManagerAssignmentHealthFilter] = useState("");
   const [managerScopeCountFilter, setManagerScopeCountFilter] = useState("");
   const [managerSort, setManagerSort] = useState("name-asc");
-  const [managerPlantSearch, setManagerPlantSearch] = useState<Record<string, string>>({});
+  const [managerPlantPicker, setManagerPlantPicker] = useState<Record<string, string>>({});
   const [managerAssignedOnly, setManagerAssignedOnly] = useState<Record<string, boolean>>({});
   const managerUsers = users.filter((candidate) => candidate.role === "Mining Manager");
   const managersNeedingScope = managerUsers.filter((manager) => !(manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : [])).length);
@@ -6333,6 +6420,7 @@ function AdminAccessPage() {
     });
     return next;
   }, [filteredManagers, managerSort]);
+  const miningManagerDownloadEnabledByRole = Boolean(normalizedAccessRules.find((rule) => rule.role === "Mining Manager")?.canDownloadDocuments);
   const allRoleExportRows = useMemo<ExportRow[]>(
     () => normalizedAccessRules.map((rule) => ({
       role: formatRole(rule.role),
@@ -6495,6 +6583,13 @@ function AdminAccessPage() {
         </div>
       ) : null}
 
+      <Tabs value={activeAccessTab} onValueChange={setActiveAccessTab} className="space-y-6">
+        <TabsList className="grid w-full max-w-[620px] grid-cols-2">
+          <TabsTrigger value="role-permissions">Role permissions</TabsTrigger>
+          <TabsTrigger value="manager-assignment">Manager plant assignment</TabsTrigger>
+        </TabsList>
+
+      <TabsContent value="role-permissions" className="mt-0">
       <SectionCard title="Role permissions" action={<ExportActions fileBaseName="access-role-permissions" filteredRows={filteredRoleExportRows} allRows={allRoleExportRows} />}>
         <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <ValueHelp label="Role" placeholder="All roles" emptyLabel="No matching roles." options={roleOptions} value={roleFilter} onChange={setRoleFilter} containerClassName="w-full" />
@@ -6557,7 +6652,9 @@ function AdminAccessPage() {
           ) : null}
         </div>
       </SectionCard>
+      </TabsContent>
 
+      <TabsContent value="manager-assignment" className="mt-0">
       <SectionCard title="Manager plant assignment" action={<ExportActions fileBaseName="access-manager-plant-assignment" filteredRows={filteredManagerAssignmentExportRows} allRows={allManagerAssignmentExportRows} />}>
         <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           <ValueHelp label="Manager" placeholder="All managers" emptyLabel="No matching managers." options={managerNameOptions} value={managerNameFilter} onChange={setManagerNameFilter} containerClassName="w-full" />
@@ -6588,22 +6685,18 @@ function AdminAccessPage() {
         <div className="space-y-4">
           {sortedManagers.map((manager) => {
             const selected = manager.assignedPlantIds || (manager.plantId ? [manager.plantId] : []);
-            const plantSearch = (managerPlantSearch[manager.id] || "").trim().toLowerCase();
+            const selectedPlantFilter = managerPlantPicker[manager.id] || "";
             const assignedOnly = Boolean(managerAssignedOnly[manager.id]);
             const visiblePlants = plants.filter((plant) => {
-              const matchesSearch = !plantSearch || [
-                plant.name,
-                plant.plant,
-                plant.plantName,
-                plant.plantName2,
-                plant.company,
-                plant.location,
-                plant.manager,
-                plant.id,
-              ].filter(Boolean).join(" ").toLowerCase().includes(plantSearch);
+              const matchesSearch = !selectedPlantFilter || plant.id === selectedPlantFilter;
               const matchesAssigned = !assignedOnly || selected.includes(plant.id);
               return matchesSearch && matchesAssigned;
             });
+            const managerPlantPickerOptions = plants.map((plant) => ({
+              value: plant.id,
+              label: plant.name,
+              meta: [plant.company, plant.location].filter(Boolean).join(" • ") || "Plant",
+            }));
             return (
               <div key={manager.id} className="rounded-[28px] border border-slate-200 bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -6613,11 +6706,11 @@ function AdminAccessPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      <span>Download access</span>
+                      <span>{miningManagerDownloadEnabledByRole ? "Download access enabled by role" : "Grant download access"}</span>
                       <input
                         type="checkbox"
-                        checked={Boolean(manager.capabilityOverrides?.canDownloadDocuments)}
-                        disabled={savingManagerId === manager.id}
+                        checked={Boolean(manager.capabilities?.canDownloadDocuments)}
+                        disabled={savingManagerId === manager.id || miningManagerDownloadEnabledByRole}
                         onChange={(event) => void toggleManagerDownloadAccess(manager, event.target.checked)}
                         className="h-4 w-4 accent-teal-600"
                       />
@@ -6625,16 +6718,25 @@ function AdminAccessPage() {
                     <div className="text-sm text-slate-500">{selected.length} plant{selected.length === 1 ? "" : "s"} assigned</div>
                   </div>
                 </div>
+                {!miningManagerDownloadEnabledByRole ? (
+                  <div className="mt-3 text-sm text-slate-500">
+                    This override only affects the selected manager when the Mining Manager role-level download permission is disabled.
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slate-500">
+                    Mining Manager downloads are currently enabled in role permissions, so this manager inherits that access automatically.
+                  </div>
+                )}
                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <label className="relative min-w-[240px] flex-1">
-                    <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={managerPlantSearch[manager.id] || ""}
-                      onChange={(event) => setManagerPlantSearch((current) => ({ ...current, [manager.id]: event.target.value }))}
-                      placeholder="Search plants for this manager"
-                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-700 outline-none transition focus:border-teal-500"
-                    />
-                  </label>
+                  <ValueHelp
+                    label="Plant"
+                    placeholder="All plants for this manager"
+                    emptyLabel="No matching plants."
+                    options={managerPlantPickerOptions}
+                    value={managerPlantPicker[manager.id] || ""}
+                    onChange={(nextValue) => setManagerPlantPicker((current) => ({ ...current, [manager.id]: nextValue }))}
+                    containerClassName="min-w-[240px] flex-1"
+                  />
                   <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <input
                       type="checkbox"
@@ -6644,11 +6746,11 @@ function AdminAccessPage() {
                     />
                     <span>Assigned only</span>
                   </label>
-                  {(managerPlantSearch[manager.id] || assignedOnly) ? (
+                  {(managerPlantPicker[manager.id] || assignedOnly) ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setManagerPlantSearch((current) => ({ ...current, [manager.id]: "" }));
+                        setManagerPlantPicker((current) => ({ ...current, [manager.id]: "" }));
                         setManagerAssignedOnly((current) => ({ ...current, [manager.id]: false }));
                       }}
                       className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
@@ -6686,6 +6788,8 @@ function AdminAccessPage() {
           ) : null}
         </div>
       </SectionCard>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }
