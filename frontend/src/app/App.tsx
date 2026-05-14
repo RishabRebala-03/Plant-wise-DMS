@@ -6162,51 +6162,63 @@ function ManagerOversightPage() {
           </table>
         </div>
 
-        {editor ? (
-          <div className="mt-6 grid gap-4 rounded-[28px] border border-slate-200 bg-slate-50 p-5 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <div className="text-lg font-semibold text-slate-900">Edit user</div>
-              <div className="mt-1 text-sm text-slate-500">Update the user record and plant assignment.</div>
-            </div>
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Name</span>
-              <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
-            </label>
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Email</span>
-              <input value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
-            </label>
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Assigned plants</span>
-              <div className="grid max-h-48 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-white p-3">
-                {plants.map((plant) => (
-                  <label key={plant.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">
-                    <span>{plant.name}</span>
-                    <input
-                      type="checkbox"
-                      checked={draft.assignedPlantIds.includes(plant.id)}
-                      onChange={(event) => setDraft((current) => ({
-                        ...current,
-                        assignedPlantIds: event.target.checked
-                          ? [...current.assignedPlantIds, plant.id]
-                          : current.assignedPlantIds.filter((id) => id !== plant.id),
-                      }))}
-                    />
-                  </label>
-                ))}
+      </SectionCard>
+      <Dialog open={Boolean(editor)} onOpenChange={(open) => {
+        if (!open) {
+          setEditor(null);
+        }
+      }}>
+        <DialogContent className="rounded-[28px] border border-slate-200 bg-white p-0 shadow-[0_28px_80px_rgba(15,23,42,0.18)] sm:max-w-[720px]">
+          <div className="p-6">
+            <DialogHeader className="text-left">
+              <DialogTitle className="text-xl font-semibold text-slate-900">Edit user</DialogTitle>
+              <DialogDescription className="mt-2 text-sm leading-6 text-slate-500">
+                Update the user record and plant assignment.
+              </DialogDescription>
+            </DialogHeader>
+            {editor ? (
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Name</span>
+                  <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Email</span>
+                  <input value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 outline-none transition focus:border-teal-500" />
+                </label>
+                <label className="space-y-2 text-sm md:col-span-2">
+                  <span className="font-medium text-slate-700">Assigned plants</span>
+                  <div className="grid max-h-72 gap-2 overflow-auto rounded-2xl border border-slate-200 bg-white p-3">
+                    {plants.map((plant) => (
+                      <label key={plant.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">
+                        <span>{plant.name}</span>
+                        <input
+                          type="checkbox"
+                          checked={draft.assignedPlantIds.includes(plant.id)}
+                          onChange={(event) => setDraft((current) => ({
+                            ...current,
+                            assignedPlantIds: event.target.checked
+                              ? [...current.assignedPlantIds, plant.id]
+                              : current.assignedPlantIds.filter((id) => id !== plant.id),
+                          }))}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </label>
               </div>
-            </label>
-            <div className="md:col-span-2 flex flex-wrap gap-3">
-              <button onClick={() => void saveManager()} disabled={submitting === editor.id} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
-                Save changes
-              </button>
+            ) : null}
+            <DialogFooter className="mt-6">
               <button onClick={() => setEditor(null)} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Cancel
               </button>
-            </div>
+              <button onClick={() => void saveManager()} disabled={!editor || submitting === editor.id} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
+                {editor && submitting === editor.id ? "Saving..." : "Save changes"}
+              </button>
+            </DialogFooter>
           </div>
-        ) : null}
-      </SectionCard>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={Boolean(resetPasswordTarget)}
         onOpenChange={(open) => {
