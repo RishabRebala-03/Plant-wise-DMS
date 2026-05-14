@@ -693,7 +693,11 @@ export function ManagerUpload() {
                   {filteredRecentUploads.length ? (
                     filteredRecentUploads.map((document) => (
                       <tr key={document.id}>
-                        <td className="text-strong">{document.name}</td>
+                        <td className="text-strong">
+                          <button onClick={() => void openDocument(document)} className="text-[#0A6ED1] hover:underline text-left cursor-pointer">
+                            {document.name}
+                          </button>
+                        </td>
                         <td>{document.plant}</td>
                         <td>{document.category}</td>
                         <td>{getDocumentTimestamp(document)}</td>

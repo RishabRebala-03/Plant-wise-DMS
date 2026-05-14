@@ -260,7 +260,7 @@ export function ManagerDocuments({ mine = true }: ManagerDocumentsProps) {
               {documents.map((document) => (
                 <tr key={document.id} className="hover:bg-[#fafafa] transition-colors">
                   <td className="px-5 py-4">
-                    <button onClick={() => void openDocumentDetails(document)} className="text-[#0A6ED1] hover:underline text-left cursor-pointer" style={{ fontSize: 13, fontWeight: 500 }}>
+                    <button onClick={() => void openOriginalDocument(document)} className="text-[#0A6ED1] hover:underline text-left cursor-pointer" style={{ fontSize: 13, fontWeight: 500 }}>
                       {document.name}
                     </button>
                     <div className="text-[#999] mt-0.5" style={{ fontSize: 11 }}>v{document.version} · by {document.uploadedBy}</div>

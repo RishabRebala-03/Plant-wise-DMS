@@ -395,7 +395,7 @@ export function CeoDocuments() {
                     if (column.id === "name") {
                       return (
                         <td key={column.id} className="px-5 py-4 align-top">
-                          <button onClick={() => void openDocumentDetails(document)} className="text-[#0A6ED1] hover:underline text-left cursor-pointer" style={{ fontSize: 13, fontWeight: 500 }}>
+                          <button onClick={() => void openOriginalDocument(document)} className="text-[#0A6ED1] hover:underline text-left cursor-pointer" style={{ fontSize: 13, fontWeight: 500 }}>
                             {document.name}
                           </button>
                           <div className="text-[#999] mt-0.5" style={{ fontSize: 11 }}>v{document.version}</div>

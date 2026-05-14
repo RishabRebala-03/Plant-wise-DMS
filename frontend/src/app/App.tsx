@@ -1300,7 +1300,11 @@ function CeoDashboardPage() {
               <tbody>
                 {plantSummary.slice(0, 4).map((item) => (
                   <tr key={item.plantId}>
-                    <td className="text-strong">{item.plant}</td>
+                    <td className="text-strong">
+                      <Link to={`/plants/${item.plantId}`} className="text-[#0A6ED1] hover:underline">
+                        {item.plant}
+                      </Link>
+                    </td>
                     <td>{item.documents}</td>
                     <td>{item.projects}</td>
                     <td>{item.locked}</td>
@@ -1328,7 +1332,11 @@ function CeoDashboardPage() {
               <tbody>
                 {(stalledPlants.length ? stalledPlants : plants.slice(0, 3)).map((plant) => (
                   <tr key={plant.id}>
-                    <td className="text-strong">{plant.name}</td>
+                    <td className="text-strong">
+                      <Link to={`/plants/${plant.id}`} className="text-[#0A6ED1] hover:underline">
+                        {plant.name}
+                      </Link>
+                    </td>
                     <td>{formatDateTime(plant.lastUpload)}</td>
                     <td><Link to={`/plants/${plant.id}`} className="font-semibold text-[#0A6ED1] hover:underline">Open</Link></td>
                   </tr>
@@ -1736,7 +1744,11 @@ function ManagerDashboardPage() {
               <tbody>
                 {myProjects.map((project) => (
                   <tr key={project.id}>
-                    <td className="text-strong">{project.name}</td>
+                    <td className="text-strong">
+                      <Link to={`/plants/${project.plantId}/projects/${project.id}/documents`} className="text-[#0A6ED1] hover:underline">
+                        {project.name}
+                      </Link>
+                    </td>
                     <td>{project.code}</td>
                     <td>{project.plantName}</td>
                     <td>{project.documentIds.length}</td>
@@ -2120,7 +2132,11 @@ function PlantIndexPage() {
             <tbody>
               {sortedPlantRows.map(({ plant, docCount, projectCount, activityBand }) => (
                 <tr key={plant.id}>
-                  <td className="text-strong">{plant.name}</td>
+                  <td className="text-strong">
+                    <Link to={`/plants/${plant.id}`} className="text-[#0A6ED1] hover:underline">
+                      {plant.name}
+                    </Link>
+                  </td>
                   <td>{plant.status || "-"}</td>
                   <td>{plant.company || "-"}</td>
                   <td>{projectCount}</td>
@@ -2214,7 +2230,11 @@ function PlantProjectsPage() {
             <tbody>
               {plantProjects.map((project) => (
                 <tr key={project.id}>
-                  <td className="text-strong">{project.name}</td>
+                  <td className="text-strong">
+                    <Link to={`/plants/${plant.id}/projects/${project.id}/documents`} className="text-[#0A6ED1] hover:underline">
+                      {project.name}
+                    </Link>
+                  </td>
                   <td>{project.code}</td>
                   <td>{project.documentIds.length}</td>
                   <td>{project.owner}</td>
@@ -2407,7 +2427,9 @@ function ProjectsPage() {
               {sortedProjects.map((project) => (
                 <tr key={project.id}>
                   <td className="px-4 py-4">
-                    <div className="font-medium text-slate-900">{project.name}</div>
+                    <Link to={`/plants/${project.plantId}/projects/${project.id}/documents`} className="font-medium text-[#0A6ED1] hover:underline">
+                      {project.name}
+                    </Link>
                     <div className="mt-1 text-xs text-slate-500">{project.code || project.id}</div>
                   </td>
                   <td className="px-4 py-4 text-slate-600">{project.plantName}</td>
@@ -3801,7 +3823,11 @@ function AnalyticsPage() {
             <tbody>
               {signalWall.map((item) => (
                 <tr key={item.plantId}>
-                  <td className="text-strong">{item.plant}</td>
+                  <td className="text-strong">
+                    <button type="button" onClick={() => navigate(`/plants/${item.plantId}`)} className="text-[#0A6ED1] hover:underline">
+                      {item.plant}
+                    </button>
+                  </td>
                   <td>{item.documents}</td>
                   <td>{item.projects}</td>
                   <td>{item.locked}</td>
