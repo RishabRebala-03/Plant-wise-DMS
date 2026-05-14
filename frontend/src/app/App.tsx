@@ -3234,7 +3234,7 @@ function DocumentDetailPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               {document.file?.storageId && canViewOriginal ? (
                 <button onClick={() => void handleOpenPreview()} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                  Open original file
+                  Preview in app
                 </button>
               ) : null}
               {document.file?.storageId && canDownloadOriginal ? (
