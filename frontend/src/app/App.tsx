@@ -3761,47 +3761,31 @@ function AnalyticsPage() {
           </div>
         </div>
 
-        <SectionCard title="Trust and security layer" subtitle="Live confidence score across identity, network, session, and document controls">
-          <div className="rounded-[32px] bg-[linear-gradient(135deg,#0f172a,#1e293b)] p-6 text-white">
-            <div className="text-xs uppercase tracking-[0.24em] text-white/50">Trust score</div>
-            <div className="mt-3 text-5xl font-semibold tracking-tight">{trustScore}</div>
-            <div className="mt-2 text-sm text-white/70">
-              {trustScore >= 85 ? "Posture is strong and resilient." : trustScore >= 70 ? "Healthy overall, with some watchpoints." : "Attention needed across governance controls."}
-            </div>
-            <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-[linear-gradient(90deg,#22c55e,#38bdf8)]" style={{ width: `${trustScore}%` }} />
-            </div>
+        <div className="data-table-panel">
+          <div className="data-table-toolbar">
+            <h2 className="text-lg font-semibold text-slate-900">Trust Pillars</h2>
           </div>
-          <div className="mt-4 data-table-panel">
-            <div className="data-table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Control Area</th>
-                    <th>Score</th>
-                    <th>Detail</th>
+          <div className="data-table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Control Area</th>
+                  <th>Score</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trustPillars.map((pillar) => (
+                  <tr key={pillar.label}>
+                    <td className="text-strong">{pillar.label}</td>
+                    <td>{pillar.value}/100</td>
+                    <td className="min-w-[260px]">{pillar.detail}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {trustPillars.map((pillar) => (
-                    <tr key={pillar.label}>
-                      <td className="text-strong">{pillar.label}</td>
-                      <td>{pillar.value}/100</td>
-                      <td className="min-w-[260px]">{pillar.detail}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </SectionCard>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Upload trend" value={`${timelineHighlights.growth >= 0 ? "+" : ""}${timelineHighlights.growth}%`} hint="Month-over-month document movement." icon={LineChartIcon} onClick={() => navigate("/documents")} />
-        <MetricCard label="Top plant" value={timelineHighlights.mostDocumentedPlant?.plant || "-"} hint={`${timelineHighlights.mostDocumentedPlant?.documents || 0} indexed documents`} icon={Building2} tone="blue" onClick={() => navigate("/plants")} />
-        <MetricCard label="Busiest category" value={timelineHighlights.busiestCategory?.name || "-"} hint={`${timelineHighlights.busiestCategory?.value || 0} records`} icon={BarChart3} tone="amber" onClick={() => navigate("/documents")} />
-        <MetricCard label="Locked records" value={timelineHighlights.totalLocked} hint="Manager-opened records in controlled state." icon={Lock} tone="rose" onClick={() => navigate("/activity-logs")} />
+        </div>
       </div>
 
       <div className="data-table-panel">
@@ -3844,23 +3828,7 @@ function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <SectionCard title="Monthly uploads and controlled access" subtitle="Line chart with overlay for locked records">
-          <button type="button" onClick={() => navigate("/documents")} className="block h-96 w-full rounded-3xl transition hover:bg-slate-50">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthly}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="month" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="uploads" name="Uploads" stroke="#1d4ed8" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="locked" name="Locked" stroke="#5B738B" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </button>
-        </SectionCard>
-
+      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <SectionCard title="Category distribution" subtitle="Portfolio view by document category">
           <div className="h-96 rounded-3xl transition hover:bg-slate-50">
             <ResponsiveContainer width="100%" height="100%">
@@ -3887,9 +3855,7 @@ function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
         </SectionCard>
-      </div>
 
-      <div className="grid gap-6">
         <SectionCard title="Plant document density" subtitle="Bar chart comparing documents, projects, and average depth">
           <div className="h-[26rem] rounded-3xl transition hover:bg-slate-50">
             <ResponsiveContainer width="100%" height="100%">
@@ -3936,56 +3902,9 @@ function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
         </SectionCard>
-
-        <SectionCard title="Rolling document accumulation" subtitle="Area graph showing cumulative load by month">
-          <button type="button" onClick={() => navigate("/documents")} className="block h-[26rem] w-full rounded-3xl transition hover:bg-slate-50">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={monthly.reduce<Array<{ month: string; cumulative: number; uploads: number }>>((acc, item) => {
-                  const previous = acc[acc.length - 1]?.cumulative || 0;
-                  acc.push({
-                    month: item.month,
-                    uploads: item.uploads,
-                    cumulative: previous + item.uploads,
-                  });
-                  return acc;
-                }, [])}
-              >
-                <defs>
-                  <linearGradient id="uploadArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0f766e" stopOpacity={0.6} />
-                    <stop offset="95%" stopColor="#0f766e" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="month" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip />
-                <Area type="monotone" dataKey="cumulative" name="Cumulative documents" stroke="#0f766e" fill="url(#uploadArea)" strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </button>
-        </SectionCard>
       </div>
 
       <div className="grid gap-6">
-        <SectionCard title="Plant performance radar" subtitle="Multi-axis comparison across top plants">
-          <button type="button" onClick={() => navigate("/plants")} className="block h-[26rem] w-full rounded-3xl transition hover:bg-slate-50">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarSeries}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="plant" />
-                <PolarRadiusAxis />
-                <Radar name="Documents" dataKey="documents" stroke="#1d4ed8" fill="#1d4ed8" fillOpacity={0.2} />
-                <Radar name="Projects x10" dataKey="projects" stroke="#0f766e" fill="#0f766e" fillOpacity={0.2} />
-                <Radar name="Locks x8" dataKey="locks" stroke="#5B738B" fill="#5B738B" fillOpacity={0.16} />
-                <Legend />
-                <Tooltip />
-              </RadarChart>
-            </ResponsiveContainer>
-          </button>
-        </SectionCard>
-
         <SectionCard title="Project intensity and note sensitivity" subtitle="Project comparison with document volume and private-note signals">
           <div className="h-[26rem] rounded-3xl transition hover:bg-slate-50">
             <ResponsiveContainer width="100%" height="100%">
@@ -4019,6 +3938,93 @@ function AnalyticsPage() {
                 />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-6">
+        <SectionCard title="Monthly uploads and controlled access" subtitle="Line chart with overlay for locked records">
+          <button type="button" onClick={() => navigate("/documents")} className="block h-96 w-full rounded-3xl transition hover:bg-slate-50">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthly}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="uploads" name="Uploads" stroke="#1d4ed8" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="locked" name="Locked" stroke="#5B738B" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </button>
+        </SectionCard>
+
+        <SectionCard title="Rolling document accumulation" subtitle="Area graph showing cumulative load by month">
+          <button type="button" onClick={() => navigate("/documents")} className="block h-[26rem] w-full rounded-3xl transition hover:bg-slate-50">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={monthly.reduce<Array<{ month: string; cumulative: number; uploads: number }>>((acc, item) => {
+                  const previous = acc[acc.length - 1]?.cumulative || 0;
+                  acc.push({
+                    month: item.month,
+                    uploads: item.uploads,
+                    cumulative: previous + item.uploads,
+                  });
+                  return acc;
+                }, [])}
+              >
+                <defs>
+                  <linearGradient id="uploadArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0f766e" stopOpacity={0.6} />
+                    <stop offset="95%" stopColor="#0f766e" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip />
+                <Area type="monotone" dataKey="cumulative" name="Cumulative documents" stroke="#0f766e" fill="url(#uploadArea)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </button>
+        </SectionCard>
+
+        <SectionCard title="Plant performance radar" subtitle="Multi-axis comparison across top plants">
+          <button type="button" onClick={() => navigate("/plants")} className="block h-[26rem] w-full rounded-3xl transition hover:bg-slate-50">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarSeries}>
+                <PolarGrid />
+                <PolarAngleAxis dataKey="plant" />
+                <PolarRadiusAxis />
+                <Radar name="Documents" dataKey="documents" stroke="#1d4ed8" fill="#1d4ed8" fillOpacity={0.2} />
+                <Radar name="Projects x10" dataKey="projects" stroke="#0f766e" fill="#0f766e" fillOpacity={0.2} />
+                <Radar name="Locks x8" dataKey="locks" stroke="#5B738B" fill="#5B738B" fillOpacity={0.16} />
+                <Legend />
+                <Tooltip />
+              </RadarChart>
+            </ResponsiveContainer>
+          </button>
+        </SectionCard>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Upload trend" value={`${timelineHighlights.growth >= 0 ? "+" : ""}${timelineHighlights.growth}%`} hint="Month-over-month document movement." icon={LineChartIcon} onClick={() => navigate("/documents")} />
+        <MetricCard label="Top plant" value={timelineHighlights.mostDocumentedPlant?.plant || "-"} hint={`${timelineHighlights.mostDocumentedPlant?.documents || 0} indexed documents`} icon={Building2} tone="blue" onClick={() => navigate("/plants")} />
+        <MetricCard label="Busiest category" value={timelineHighlights.busiestCategory?.name || "-"} hint={`${timelineHighlights.busiestCategory?.value || 0} records`} icon={BarChart3} tone="amber" onClick={() => navigate("/documents")} />
+        <MetricCard label="Locked records" value={timelineHighlights.totalLocked} hint="Manager-opened records in controlled state." icon={Lock} tone="rose" onClick={() => navigate("/activity-logs")} />
+      </div>
+
+      <div className="grid gap-6">
+        <SectionCard title="Trust and security layer" subtitle="Live confidence score across identity, network, session, and document controls">
+          <div className="rounded-[32px] bg-[linear-gradient(135deg,#0f172a,#1e293b)] p-6 text-white">
+            <div className="text-xs uppercase tracking-[0.24em] text-white/50">Trust score</div>
+            <div className="mt-3 text-5xl font-semibold tracking-tight">{trustScore}</div>
+            <div className="mt-2 text-sm text-white/70">
+              {trustScore >= 85 ? "Posture is strong and resilient." : trustScore >= 70 ? "Healthy overall, with some watchpoints." : "Attention needed across governance controls."}
+            </div>
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-[linear-gradient(90deg,#22c55e,#38bdf8)]" style={{ width: `${trustScore}%` }} />
+            </div>
           </div>
         </SectionCard>
       </div>
@@ -5744,6 +5750,11 @@ function ManagerOversightPage() {
   const [emailFilter, setEmailFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [scopeFilter, setScopeFilter] = useState("");
+  const [idFilter, setIdFilter] = useState("");
+  const [assignmentCountFilter, setAssignmentCountFilter] = useState("");
+  const [twoFactorFilter, setTwoFactorFilter] = useState("");
+  const [manageUsersFilter, setManageUsersFilter] = useState("");
+  const [analyticsAccessFilter, setAnalyticsAccessFilter] = useState("");
   const [managerSort, setManagerSort] = useState("name-asc");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -5780,6 +5791,7 @@ function ManagerOversightPage() {
     [plants],
   );
   const emailOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => candidate.email), "Email"), [directoryUsers]);
+  const idOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => candidate.id), "User ID"), [directoryUsers]);
   const statusOptions = useMemo(() => buildValueHelpOptions(directoryUsers.map((candidate) => candidate.status), "Status"), [directoryUsers]);
   const scopeOptions = useMemo(
     () => [
@@ -5787,6 +5799,22 @@ function ManagerOversightPage() {
       { value: "single", label: "Single plant", meta: "Plant scope" },
       { value: "multi", label: "Multi plant", meta: "Plant scope" },
       { value: "global", label: "Global", meta: "Plant scope" },
+    ],
+    [],
+  );
+  const assignmentCountOptions = useMemo(
+    () => [
+      { value: "0", label: "0 plants", meta: "Assignments" },
+      { value: "1", label: "1 plant", meta: "Assignments" },
+      { value: "2+", label: "2+ plants", meta: "Assignments" },
+      { value: "global", label: "Global users", meta: "Assignments" },
+    ],
+    [],
+  );
+  const yesNoFilterOptions = useMemo(
+    () => [
+      { value: "yes", label: "Yes", meta: "State" },
+      { value: "no", label: "No", meta: "State" },
     ],
     [],
   );
@@ -5804,6 +5832,7 @@ function ManagerOversightPage() {
     () =>
       directoryUsers.filter((candidate) => {
         const assignedIds = candidate.assignedPlantIds || (candidate.plantId ? [candidate.plantId] : []);
+        const assignmentCount = candidate.role === "Admin" || candidate.role === "CEO" ? "global" : assignedIds.length >= 2 ? "2+" : String(assignedIds.length);
         const scope = candidate.role === "Admin" || candidate.role === "CEO"
           ? "global"
           : assignedIds.length > 1 ? "multi" : assignedIds.length === 1 ? "single" : "unassigned";
@@ -5811,11 +5840,29 @@ function ManagerOversightPage() {
         const matchesRole = matchesValueHelpFilter(roleFilter, formatRole(candidate.role));
         const matchesPlant = !plantFilter || assignedIds.includes(plantFilter);
         const matchesEmail = matchesValueHelpFilter(emailFilter, candidate.email);
+        const matchesId = matchesValueHelpFilter(idFilter, candidate.id);
         const matchesStatus = matchesValueHelpFilter(statusFilter, candidate.status);
         const matchesScope = matchesValueHelpFilter(scopeFilter, scope);
-        return matchesManager && matchesRole && matchesPlant && matchesEmail && matchesStatus && matchesScope;
+        const matchesAssignmentCount = matchesValueHelpFilter(assignmentCountFilter, assignmentCount);
+        const matchesTwoFactor = !twoFactorFilter
+          || (twoFactorFilter === "yes" ? Boolean(candidate.security?.twoFactorEnabled) : !candidate.security?.twoFactorEnabled);
+        const matchesManageUsers = !manageUsersFilter
+          || (manageUsersFilter === "yes" ? Boolean(candidate.accessRule?.canManageUsers ?? candidate.capabilities?.canManageUsers) : !(candidate.accessRule?.canManageUsers ?? candidate.capabilities?.canManageUsers));
+        const matchesAnalyticsAccess = !analyticsAccessFilter
+          || (analyticsAccessFilter === "yes" ? Boolean(candidate.accessRule?.canAccessAnalytics ?? candidate.capabilities?.canAccessAnalytics) : !(candidate.accessRule?.canAccessAnalytics ?? candidate.capabilities?.canAccessAnalytics));
+        return matchesManager
+          && matchesRole
+          && matchesPlant
+          && matchesEmail
+          && matchesId
+          && matchesStatus
+          && matchesScope
+          && matchesAssignmentCount
+          && matchesTwoFactor
+          && matchesManageUsers
+          && matchesAnalyticsAccess;
       }),
-    [directoryUsers, emailFilter, managerFilter, plantFilter, roleFilter, scopeFilter, statusFilter],
+    [analyticsAccessFilter, assignmentCountFilter, directoryUsers, emailFilter, idFilter, manageUsersFilter, managerFilter, plantFilter, roleFilter, scopeFilter, statusFilter, twoFactorFilter],
   );
   const sortedManagers = useMemo(() => {
     const next = [...filtered];
@@ -6003,6 +6050,16 @@ function ManagerOversightPage() {
             triggerClassName="h-12"
           />
           <ValueHelp
+            label="User ID"
+            placeholder="All user IDs"
+            emptyLabel="No matching user IDs."
+            options={idOptions}
+            value={idFilter}
+            onChange={setIdFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
+          <ValueHelp
             label="Status"
             placeholder="All statuses"
             emptyLabel="No matching statuses."
@@ -6024,6 +6081,46 @@ function ManagerOversightPage() {
               triggerClassName="h-12"
             />
           </div>
+          <ValueHelp
+            label="Assignments"
+            placeholder="Any assignment count"
+            emptyLabel="No matching assignment counts."
+            options={assignmentCountOptions}
+            value={assignmentCountFilter}
+            onChange={setAssignmentCountFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
+          <ValueHelp
+            label="2FA"
+            placeholder="Any 2FA state"
+            emptyLabel="No matching 2FA states."
+            options={yesNoFilterOptions}
+            value={twoFactorFilter}
+            onChange={setTwoFactorFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
+          <ValueHelp
+            label="Manage Users"
+            placeholder="Any management access"
+            emptyLabel="No matching management-access states."
+            options={yesNoFilterOptions}
+            value={manageUsersFilter}
+            onChange={setManageUsersFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
+          <ValueHelp
+            label="Analytics Access"
+            placeholder="Any analytics access"
+            emptyLabel="No matching analytics-access states."
+            options={yesNoFilterOptions}
+            value={analyticsAccessFilter}
+            onChange={setAnalyticsAccessFilter}
+            containerClassName="w-full"
+            triggerClassName="h-12"
+          />
           <div className="flex items-end gap-3">
             <ValueHelp
               label="Sort By"
@@ -6044,8 +6141,13 @@ function ManagerOversightPage() {
                 setRoleFilter("");
                 setPlantFilter("");
                 setEmailFilter("");
+                setIdFilter("");
                 setStatusFilter("");
                 setScopeFilter("");
+                setAssignmentCountFilter("");
+                setTwoFactorFilter("");
+                setManageUsersFilter("");
+                setAnalyticsAccessFilter("");
                 setManagerSort("name-asc");
               }}
               className="h-12 shrink-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
